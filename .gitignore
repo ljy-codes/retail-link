@@ -1,0 +1,15 @@
+# Local runtime data and imports
+data/
+examples/导入记录/
+本地数据/
+*.sqlite3
+*.db
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+
+# Local test and editor artifacts
+测试空间/
+开发空间/
+概览/答疑文档/

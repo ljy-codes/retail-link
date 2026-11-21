@@ -1,0 +1,107 @@
+/* Shared component rules. Appearance controls supply the color tokens. */
+:root {
+  --surface-subtle: #f3f5fa;
+  --surface-raised: #fff;
+  --text-secondary: #515c70;
+  --line-strong: #cbd2e0;
+  --focus-ring: #7054de;
+  --ui-scale: 1;
+  --radius-control: 9px;
+  --radius-card: 14px;
+}
+body {
+  color: var(--ink);
+  background-color: var(--canvas);
+  background-image: var(--canvas-gradient, none);
+  background-attachment: fixed;
+  -webkit-font-smoothing: antialiased;
+  transition: background-color .18s ease, color .18s ease;
+}
+html[data-glass="on"] .topbar,
+html[data-glass="on"] .card,
+html[data-glass="on"] .modal,
+html[data-glass="on"] .drawer,
+html[data-glass="on"] .dr-panel {
+  background-color: color-mix(in srgb, var(--paper) 78%, transparent);
+  backdrop-filter: blur(18px) saturate(120%);
+}
+html[data-glass="on"] .card,
+html[data-glass="on"] .modal,
+html[data-glass="on"] .drawer {border-color: color-mix(in srgb, var(--line-strong) 70%, transparent)}
+html[data-glass="off"] .topbar,
+html[data-glass="off"] .card,
+html[data-glass="off"] .modal,
+html[data-glass="off"] .drawer,
+html[data-glass="off"] .dr-panel {backdrop-filter:none}
+.sidebar {background:var(--nav);color:var(--nav-text,var(--ink));border-right:1px solid var(--line)}
+.brand {color:var(--nav-strong,var(--ink))}
+.brand small,.workspace-label,.sidebar-footer small,.sidebar-note small,.version {color:var(--nav-muted,var(--muted))}
+.brand small {font-size:calc(9px * var(--ui-scale));letter-spacing:1.25px}
+.workspace-label span {color:var(--nav-text,var(--text-secondary));border-color:var(--line-strong)}
+.nav-item,.sidebar-note,.sidebar-footer {color:var(--nav-text,var(--text-secondary))}
+.nav-item:hover {background:var(--nav-active,var(--purple-soft));color:var(--nav-strong,var(--ink))}
+.nav-item.active {background:var(--nav-active,var(--purple-soft));color:var(--nav-active-text,var(--purple))}
+.nav-dot {background:currentColor}
+.brand-mark span {background:var(--purple);opacity:.55}
+.brand-mark span:nth-child(2) {background:var(--purple);opacity:.8}
+.brand-mark span:nth-child(3) {background:var(--purple);opacity:1}
+.sidebar-footer {border-color:var(--line)}
+.topbar {background:var(--surface-raised);border-color:var(--line);gap:14px}
+.topbar-right {gap:14px;min-width:0}
+.breadcrumb,.page-heading p {color:var(--text-secondary)}
+.breadcrumb strong,.page-heading h1 {color:var(--ink)}
+.avatar,.tag.purple,.kpi-icon,.product-avatar {color:var(--purple);background:var(--purple-soft);border-color:var(--line)}
+.card {background:var(--paper);border-radius:var(--radius-card);box-shadow:var(--shadow)}
+.btn,.dr-btn {border-radius:var(--radius-control);min-height:38px}
+.btn-primary,.dr-btn.primary {color:var(--accent-contrast,#fff);background:var(--purple);border-color:var(--purple)}
+.btn-primary:hover,.dr-btn.primary:hover {background:var(--purple-dark);border-color:var(--purple-dark);color:var(--accent-contrast,#fff)}
+.btn-text {background:transparent}
+.btn-subtle,.tag.purple {background:var(--purple-soft);color:var(--purple)}
+.source-strip {background:linear-gradient(110deg,var(--paper) 60%,var(--surface-subtle));border-color:var(--line)}
+.welcome-card {background:linear-gradient(125deg,var(--paper) 55%,var(--surface-subtle))}
+.source-caption,.source-time,.kpi-header,.kpi-footer,.page-footer {color:var(--muted)}
+.kpi-footer strong,.section-subtitle {color:var(--text-secondary)}
+.plan-numbers strong,.drawer-metric strong,.product-copy strong {color:var(--ink)}
+.goal-bar-fill {background:linear-gradient(90deg,var(--purple),var(--purple-dark))}
+.goal-note strong,.segmented button.active,.tab-count,.source-card.active {color:var(--purple)}
+.data-table th,.data-table th:first-child {background:var(--surface-subtle);font-weight:550}
+.data-table td {font-size:calc(13px * var(--ui-scale))}
+.data-table tbody tr:hover td {background:var(--surface-subtle)}
+.data-table .product-copy strong {font-weight:600}
+.data-table td,.dr-table td {color:var(--text-secondary)}
+.segmented button.active {background:var(--surface-raised)}
+.status-pill.good {background:var(--green-soft);color:var(--green)}
+.status-pill.error {background:var(--red-soft);color:var(--red)}
+.status-pill:not(.good):not(.error):not(.manual) {background:var(--amber-soft);color:var(--amber)}
+.info-banner.warning,.preview-location {background:var(--amber-soft);color:var(--amber);border-color:var(--line-strong)}
+.info-banner {background:var(--surface-subtle);color:var(--text-secondary);border-color:var(--line)}
+.preview-table tr.preview-target-row td {background:var(--amber-soft)}
+.preview-table td.preview-target-cell {background:var(--amber-soft)!important;box-shadow:inset 0 0 0 2px var(--amber);color:var(--ink)}
+.modal,.drawer,.history-modal,.dr-panel {color:var(--ink);background:var(--paper)}
+.dr-panel {background:var(--canvas)}
+.dr-header,.dr-tabs,.dr-footer {background:var(--paper)}
+.dr-header h2,.dr-chart strong {color:var(--ink)}
+.dr-tabs button.active {color:var(--purple);border-color:var(--purple)}
+.dr-note {background:var(--surface-subtle);color:var(--text-secondary);border-color:var(--line)}
+.dr-overlay {color:var(--ink);background:var(--overlay)}
+.dr-chart svg text {fill:var(--muted)}
+input,select,textarea {color:var(--ink);caret-color:var(--ink)}
+input::placeholder,textarea::placeholder {color:var(--muted);opacity:1}
+input:focus,select:focus,textarea:focus {border-color:var(--focus-ring)!important;box-shadow:0 0 0 2px var(--purple-soft)}
+button:focus-visible,a:focus-visible,select:focus-visible,input:focus-visible {outline:2px solid var(--focus-ring);outline-offset:3px}
+[disabled] {cursor:not-allowed!important}
+@media(min-width:1101px) {
+  .sidebar {width:calc(218px * var(--ui-scale))}
+  .app-shell {margin-left:calc(218px * var(--ui-scale))}
+}
+@media(max-width:760px) {
+  .topbar {padding-left:18px;padding-right:18px}
+  .topbar-right {gap:8px}
+  .topbar .local-status {display:none}
+  .heading-actions {flex-wrap:wrap}
+  .kpi-value {font-size:calc(25px * var(--ui-scale))}
+  .table-wrap,.dr-table-scroll {overscroll-behavior-x:contain}
+}
+@media(prefers-reduced-motion:reduce) {
+  *,*::before,*::after {animation-duration:.01ms!important;transition:none!important;scroll-behavior:auto!important}
+}

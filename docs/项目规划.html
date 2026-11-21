@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>零售通 · 项目规划</title>
+  <style>
+    :root{--ink:#18263a;--muted:#637286;--line:#e2e8ef;--bg:#f4f7fa;--paper:#fff;--green:#087e6d;--green-soft:#e8f5ef;--blue:#315cab;--blue-soft:#eef3ff;--amber:#92621a;--amber-soft:#fff5df;--navy:#122b3e}
+    *{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:92px}body{margin:0;color:var(--ink);background:var(--bg);font:15px/1.7 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif}a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}button{font:inherit}strong{font-weight:650}code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.88em;background:#eff3f7;border-radius:4px;padding:2px 5px;overflow-wrap:anywhere}.topbar{height:70px;position:sticky;top:0;z-index:10;background:rgba(255,255,255,.96);border-bottom:1px solid var(--line)}.top-inner{max-width:1360px;height:100%;margin:auto;padding:0 36px;display:flex;align-items:center;justify-content:space-between;gap:20px}.brand{display:flex;align-items:center;gap:11px;color:var(--ink)}.mark{width:33px;height:33px;border-radius:10px;display:grid;place-items:center;background:var(--navy);color:#9ee6ce;font-size:14px;font-weight:750;letter-spacing:-1px}.brand-title{font-size:15px;font-weight:650}.brand-sub{font-size:11px;color:var(--muted);letter-spacing:1.8px}.top-links{display:flex;align-items:center;gap:24px;font-size:12px}.print-btn{border:1px solid var(--line);border-radius:7px;background:white;color:var(--muted);padding:6px 12px;cursor:pointer}.hero{background:var(--navy);color:#f9fcff;position:relative;overflow:hidden}.hero:after{content:"";position:absolute;width:500px;height:500px;right:-90px;top:-285px;border:80px solid rgba(103,199,170,.065);border-radius:50%;pointer-events:none}.hero-inner{max-width:1360px;margin:auto;padding:53px 36px 46px;display:flex;align-items:flex-start;justify-content:space-between;gap:40px;position:relative;z-index:1}.eyebrow{font-size:11px;font-weight:600;letter-spacing:2.3px;text-transform:uppercase;color:#9cc1cc}.hero h1{margin:12px 0 13px;font-size:34px;line-height:1.35;letter-spacing:.5px;font-weight:650}.hero .lead{max-width:750px;color:#c0d0dd;font-size:15px;line-height:1.9;margin:0}.hero-meta{margin-top:24px;display:flex;flex-wrap:wrap;gap:8px}.hero-chip{font-size:11px;border:1px solid #365063;border-radius:5px;padding:3px 9px;color:#c3d5df}.status-card{min-width:244px;padding:20px 22px;border:1px solid #3b5361;border-radius:11px;background:rgba(255,255,255,.035)}.status-card .label{color:#9fb8c8;font-size:11px}.status-card .status{display:flex;gap:9px;align-items:center;margin:10px 0 7px;font-size:14px;font-weight:600;color:#b8eedb}.dot{height:7px;width:7px;background:#79d5b1;border-radius:50%;flex:none}.status-card .date{font-size:11px;color:#9fb8c8}.layout{max-width:1360px;margin:0 auto;padding:35px 36px 70px;display:grid;grid-template-columns:190px minmax(0,1fr);gap:33px}.toc{align-self:start;position:sticky;top:103px}.toc .label{font-size:10px;letter-spacing:2px;color:#97a1af;margin:0 0 13px 12px}.toc a{display:flex;gap:12px;color:var(--muted);font-size:12px;padding:9px 12px;border-left:2px solid transparent}.toc a:hover{background:white;color:var(--green);border-left-color:var(--green);text-decoration:none}.toc .num{color:#a7b1bd;font-size:10px;padding-top:2px}.toc-note{font-size:11px;color:#8b96a5;margin:22px 12px;line-height:1.8}.content{min-width:0}.section{padding:29px 30px;margin-bottom:20px;background:var(--paper);border:1px solid var(--line);border-radius:11px;scroll-margin-top:93px}.section-head{display:flex;align-items:flex-start;justify-content:space-between;gap:15px;margin-bottom:18px}.section h2{font-size:20px;margin:0;font-weight:650;line-height:1.4}.section-kicker{font-size:10px;color:var(--green);letter-spacing:1.6px;margin-bottom:5px}.section p{margin:10px 0;color:var(--muted);font-size:13px}.section p.intro{font-size:14px;color:#35465c}.pill{white-space:nowrap;padding:3px 8px;border-radius:5px;font-size:10px;background:var(--green-soft);color:var(--green);font-weight:600}.pill.future{color:var(--blue);background:var(--blue-soft)}.pill.pending{color:var(--amber);background:var(--amber-soft)}.principles{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:21px}.mini-card{padding:17px 17px 14px;background:#f7f9fb;border-radius:8px;border:1px solid #ebeff3}.mini-card .index{font-size:10px;color:var(--green);font-weight:600;letter-spacing:1px}.mini-card h3{font-size:14px;margin:7px 0 5px}.mini-card p{font-size:12px;line-height:1.8;margin:0}.table-wrap{overflow:auto;margin-top:15px}table{width:100%;border-collapse:collapse;font-size:12px;text-align:left}th{font-weight:600;color:#58697b;background:#f5f8fa;border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:11px 13px;vertical-align:top}td{padding:12px 13px;border-bottom:1px solid #ecf0f4;vertical-align:top;color:#57687b}td:first-child{color:#283d54;font-weight:550}tr:last-child td{border-bottom:none}.callout{padding:13px 16px;margin:17px 0 0;border-left:3px solid #5ab799;background:#f0f8f5;border-radius:0 6px 6px 0;font-size:12px;color:#44675c}.callout.amber{background:#fff9ec;border-left-color:#d4a348;color:#886b38}.flow{display:grid;grid-template-columns:repeat(5,1fr);gap:9px;margin:20px 0}.flow-step{min-width:0;padding:16px 12px;background:#f3f7fb;border:1px solid #e1e9f1;border-radius:7px;position:relative}.flow-step:after{content:"→";position:absolute;right:-12px;top:36px;color:#9aa9b9;z-index:1;font-size:15px}.flow-step:last-child:after{display:none}.flow-step .step-no{font-size:10px;color:#8094a8}.flow-step strong{display:block;font-size:12px;margin:3px 0 5px}.flow-step span{display:block;font-size:10px;line-height:1.7;color:#78889b}.architecture{border:1px solid var(--line);border-radius:9px;padding:21px;background:#fafcfd;margin-top:19px}.arch-row{display:flex;gap:12px;align-items:stretch;margin:10px 0}.arch-box{flex:1;background:white;padding:14px 16px;border:1px solid #dce5ee;border-radius:7px;font-size:12px}.arch-box strong{display:block;color:#2c4560;font-size:13px}.arch-box span{display:block;color:#7c8a9a;font-size:11px;margin-top:4px}.arch-box.main{background:#eef6f3;border-color:#c7dfd5}.arch-connect{text-align:center;font-size:11px;letter-spacing:1px;color:#7b8b9d;margin:5px 0}.details-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:20px}.details-grid h3{font-size:13px;margin:0 0 9px}.clean-list{margin:0;padding-left:18px;color:var(--muted);font-size:12px;line-height:1.9}.clean-list li+li{margin-top:6px}.roadmap{display:grid;gap:12px;margin-top:18px}.phase{border:1px solid var(--line);border-radius:8px;overflow:hidden}.phase summary{list-style:none;cursor:pointer;padding:16px 18px;display:flex;align-items:center;gap:14px;background:#fafcfd}.phase summary::-webkit-details-marker{display:none}.phase summary:after{content:"+";margin-left:auto;color:#8594a4;font-size:18px;font-weight:400}.phase[open] summary:after{content:"−"}.phase .phase-no{font-size:11px;font-weight:650;color:var(--green);min-width:36px}.phase .phase-title{font-size:13px;font-weight:600}.phase-body{padding:0 18px 17px 68px}.phase-body p{margin-top:10px;font-size:12px}.phase .scope{display:flex;gap:6px;flex-wrap:wrap;margin-top:11px}.phase .scope span{font-size:10px;border:1px solid var(--line);border-radius:4px;padding:2px 7px;color:#768496}.checklist{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:18px}.check-item{padding:15px 16px;border:1px solid var(--line);border-radius:7px}.check-item strong{font-size:13px;display:flex;align-items:center;gap:8px}.check-item p{font-size:11px;margin:6px 0 0}.check-icon{color:var(--green);font-size:13px}.check-icon.pending{color:var(--amber)}.directory{background:#162b3d;color:#ccdae5;padding:20px 22px;border-radius:8px;white-space:pre-wrap;font:12px/2 ui-monospace,SFMono-Regular,Consolas,monospace;overflow:auto;margin:18px 0}.doc-cards{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-top:17px}.doc-card{padding:14px 16px;border:1px solid var(--line);border-radius:7px}.doc-card a{font-size:13px;font-weight:600}.doc-card p{font-size:11px;margin:4px 0 0}.footer{font-size:11px;color:#8b97a6;padding:3px 3px 0;display:flex;justify-content:space-between;gap:20px}.state-legend{font-size:11px;color:#8693a2}.state-legend span+span{margin-left:12px}a:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid var(--green);outline-offset:4px}
+    @media(max-width:1050px){.layout{grid-template-columns:150px minmax(0,1fr);gap:20px;padding-left:22px;padding-right:22px}.hero-inner,.top-inner{padding-left:22px;padding-right:22px}.section{padding:24px}.flow{grid-template-columns:1fr 1fr}.flow-step:after{display:none}.hero h1{font-size:29px}.status-card{min-width:215px}.principles{grid-template-columns:1fr}.mini-card{display:grid;grid-template-columns:30px 140px 1fr;gap:8px;align-items:start}.mini-card h3{margin:0}.details-grid{grid-template-columns:1fr}}
+    @media(max-width:740px){.topbar{height:auto;min-height:66px}.top-inner{padding:12px 18px}.top-links{gap:13px;font-size:11px}.top-links a:first-child,.print-btn{display:none}.hero-inner{display:block;padding:34px 20px}.hero h1{font-size:28px}.hero .lead{font-size:13px}.status-card{margin-top:24px;max-width:370px;padding:15px 18px}.layout{display:block;padding:20px 14px 35px}.toc{display:none}.section{padding:22px 18px;margin-bottom:14px;border-radius:8px}.section h2{font-size:18px}.principles,.checklist,.doc-cards{grid-template-columns:1fr}.mini-card{display:block}.mini-card h3{margin:6px 0}.arch-row{display:block}.arch-box+.arch-box{margin-top:8px}.flow{grid-template-columns:1fr 1fr}.phase-body{padding-left:18px}.section-head{gap:9px}.footer{display:block}.directory{font-size:10px;padding:15px}.state-legend{font-size:10px}}
+    @media print{body{background:white;font-size:11px}.topbar,.toc,.print-btn{display:none}.hero{background:#122b3e!important;print-color-adjust:exact;-webkit-print-color-adjust:exact}.hero-inner{padding:25px}.hero h1{font-size:25px}.layout{display:block;padding:20px 0}.section{break-inside:avoid;box-shadow:none;margin-bottom:15px;padding:20px;border:1px solid #ddd}.phase-body{display:block}.hero:after{display:none}a{color:inherit}.footer{padding-bottom:15px}}
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="top-inner">
+      <a class="brand" href="#top"><span class="mark" aria-hidden="true">零</span><span><span class="brand-title">零售通</span><br><span class="brand-sub">PROJECT PLAN</span></span></a>
+      <nav class="top-links" aria-label="项目文档"><a href="task.md">开发记录</a><a href="答疑文档/零售通-20261121.xlsx">答疑文档</a><a href="阶段性总结.md">阶段总结</a><button class="print-btn" type="button" onclick="window.print()">打印规划</button></nav>
+    </div>
+  </header>
+
+  <div class="hero" id="top">
+    <div class="hero-inner">
+      <div>
+        <div class="eyebrow">方向基准 · 功能范围 · 实现路线</div>
+        <h1>让数据进入工具，<br>让运营直接看到结果。</h1>
+        <p class="lead">从电商看盘开始，逐步建设一个以自动化为主、支持手工补充、规则可以配置的本地运营工具。用户最终无需打开 Excel，也能获取所需数据、判断异常并安排运营工作。本地数据支持完全离线处理；线上数据支持链接及必要登录信息接入，也保留人工下载后本地处理的完整路径。</p>
+        <div class="hero-meta"><span class="hero-chip">单人本地使用</span><span class="hero-chip">原始数据可追溯</span><span class="hero-chip">配置与业务规则分离</span><span class="hero-chip">当前主线：电商看盘</span></div>
+      </div>
+      <aside class="status-card" aria-label="版本状态">
+        <div class="label">当前版本状态</div>
+        <div class="status"><span class="dot" aria-hidden="true"></span><span id="release-status">v0.1.1 外观增强版</span></div>
+        <div class="date">规划更新：2026-11-21 · Asia/Shanghai</div>
+      </aside>
+    </div>
+  </div>
+
+  <div class="layout">
+    <nav class="toc" aria-label="规划目录">
+      <div class="label">本页内容</div>
+      <a href="#delivery-principles"><span class="num">＋</span> 推进原则</a>
+      <a href="#goal"><span class="num">01</span> 长期目标</a>
+      <a href="#scope"><span class="num">02</span> 当前版本范围</a>
+      <a href="#workflow"><span class="num">03</span> 用户使用流程</a>
+      <a href="#flexible-input"><span class="num">＋</span> 格式变化与复用</a>
+      <a href="#history"><span class="num">＋</span> 历史与恢复</a>
+      <a href="#implementation"><span class="num">04</span> 具体实现</a>
+      <a href="#daily-prices"><span class="num">＋</span> 每日售价与销量</a>
+      <a href="#appearance"><span class="num">＋</span> 外观与阅读</a>
+      <a href="#product-requirements"><span class="num">＋</span> 产品运行要求</a>
+      <a href="#roadmap"><span class="num">05</span> 阶段路线</a>
+      <a href="#connectivity"><span class="num">＋</span> 离线与线上</a>
+      <a href="#data-quality"><span class="num">＋</span> 问题数据查看</a>
+      <a href="#acceptance"><span class="num">06</span> 验收标准</a>
+      <a href="#workspace"><span class="num">07</span> 目录与文档</a>
+      <a href="#decisions"><span class="num">08</span> 口径与范围约束</a>
+      <p class="toc-note">本页记录目标与实现。<br>过程进入 task.md，<br>问题进入答疑文档，<br>稳定结论进入阶段性总结。</p>
+    </nav>
+
+    <main class="content">
+            <section class="section" id="delivery-principles">
+        <div class="section-head"><div><div class="section-kicker">长期工程 · 推进原则</div><h2>问题服务主线，不让细节拖慢进度</h2></div><span class="pill">持续遵守</span></div>
+        <p class="intro">零售通是长期大工程。每日疑问和问题处理以当前阶段目标为中心，先保证主线持续产生可验证结果，再集中处理低优先级细节。</p>
+        <div class="table-wrap"><table><thead><tr><th>原则</th><th>执行方式</th></tr></thead><tbody>
+          <tr><td>控制问题数量</td><td>每份日期答疑最多保留 5 项，优先记录影响多个功能、阻塞验证或可能造成错误决策的问题。</td></tr>
+          <tr><td>问题分级</td><td>高优先级立即处理；低优先级先记录到答疑文档，不打断当前开发和验证主线。</td></tr>
+          <tr><td>允许继续验证</td><td>可以用透明默认值、可配置规则和可撤销操作推进的，不等待所有业务口径完全确定。</td></tr>
+          <tr><td>阶段时间盒</td><td>每个阶段设置目标、验收条件和时间盒；达到条件就进入下一阶段，遗留小问题集中处理。</td></tr>
+        </tbody></table></div>
+      </section>
+
+<section class="section" id="goal">
+        <div class="section-head"><div><div class="section-kicker">01 · 长期目标</div><h2>一个可以逐步接入更多工具的运营操控台</h2></div><span class="pill future">方向已确定</span></div>
+        <p class="intro">暂定名称为 <strong>零售通</strong>。先把库存、销量和每日经营数据转成可靠结果，再逐步接入更多高频运营场景。新增功能应建立在真实使用和已确认规则上。</p>
+        <div class="principles">
+          <article class="mini-card"><div class="index">01</div><h3>结果可以直接使用</h3><p>在网页中查看经营指标、商品明细和数据问题；Excel 是输入来源之一，日常查看不依赖打开 Excel。</p></article>
+          <article class="mini-card"><div class="index">02</div><h3>自动处理，允许补正</h3><p>常规读取、识别和计算由工具完成；识别不足或业务调整时可手动配置，保留修改来源和还原方式。</p></article>
+          <article class="mini-card"><div class="index">03</div><h3>让规则适应业务</h3><p>工作表、字段映射、统计口径和目标阈值可配置；数据连接方式逐阶段扩展，避免把样例格式固化成唯一模板。</p></article>
+        </div>
+      </section>
+
+      <section class="section" id="scope">
+        <div class="section-head"><div><div class="section-kicker">02 · 当前版本</div><h2>v0.1.1：选择 Excel，生成电商看盘表</h2></div><span class="pill">已实现 · 已验证</span></div>
+        <p>用户明确先做 <strong>库存与销量计算、每日经营表</strong>。本版围绕这两个结果构建文件导入、映射配置、异常提示和手工修正。</p>
+        <div class="table-wrap"><table><thead><tr><th style="width:20%">能力</th><th>当前具体范围</th><th style="width:15%">状态</th></tr></thead><tbody>
+          <tr><td>文件入口</td><td>选择或拖入 <code>.xlsx</code>、<code>.xlsm</code>；提供现有样例入口；输入本机目录路径，扫描后选择一个文件分析。</td><td><span class="pill">已实现</span></td></tr>
+          <tr><td>自动识别与配置</td><td>识别常见工作表和表头；可修改数据角色、工作表、表头行与列映射；支持横向日期表和按日期逐行记录的长表。</td><td><span class="pill">已实现</span></td></tr>
+          <tr><td>经营看盘</td><td>月计划与报单达成、距目标差额、出库与供价金额、折扣比例／折价幅度、货损金额与货损率。</td><td><span class="pill">已实现</span></td></tr>
+          <tr><td>库存与销量</td><td>现货与在途分开展示；按统计期间筛选销量，计算完整观察窗口的日均销量；库存池确认后计算现货可售天数。</td><td><span class="pill">已实现</span></td></tr>
+          <tr><td>核对与人工补正</td><td>显示日期、编码、源金额与明细差异；可预览原表、查看单元格来源；支持修正商品计划、现货数量／金额、供价和货损金额，并可还原。</td><td><span class="pill">已实现</span></td></tr>
+          <tr><td>结果与配置保存</td><td>可复用口径和字段配置保存在当前浏览器；分析结果与当次配置保存在本地记录；导出当前商品看盘结果为 CSV。</td><td><span class="pill">已实现</span></td></tr>
+          <tr><td>完整使用验证</td><td>65项自测通过；已在浏览器验证导入、人工映射、配置、手修、原表定位、历史删除恢复、CSV导出与每日记录，并启动交付版本。</td><td><span class="pill">已验证</span></td></tr>
+        </tbody></table></div>
+        <div class="callout">当前的“目录读取”是扫描并手动选择文件。目录定时监听、无人值守刷新与 URL 读取属于后续阶段。</div>
+      </section>
+
+      <section class="section" id="workflow">
+        <div class="section-head"><div><div class="section-kicker">03 · 用户流程</div><h2>把导入、核对和判断放在一个页面</h2></div></div>
+        <div class="flow" aria-label="使用流程：选择数据、识别映射、生成看盘、核对问题、保存与复用">
+          <div class="flow-step"><div class="step-no">STEP 01</div><strong>选择数据</strong><span>选择／拖入 Excel<br>或扫描本机目录</span></div>
+          <div class="flow-step"><div class="step-no">STEP 02</div><strong>识别映射</strong><span>自动识别表头<br>必要时人工调整</span></div>
+          <div class="flow-step"><div class="step-no">STEP 03</div><strong>生成看盘</strong><span>经营概览与商品明细<br>按日期和口径计算</span></div>
+          <div class="flow-step"><div class="step-no">STEP 04</div><strong>核对问题</strong><span>查看数据来源<br>修正或保留待确认</span></div>
+          <div class="flow-step"><div class="step-no">STEP 05</div><strong>保存与复用</strong><span>保存配置、导出结果<br>下次导入继续使用</span></div>
+        </div>
+        <p>日常入口是看盘页面。用户可以在工具内查明一个数值的来源、看到缺失原因并调整本次分析，不必为了查指标反复切换 Excel 工作表。</p>
+      </section>
+
+      <section class="section" id="connectivity">
+        <div class="section-head"><div><div class="section-kicker">数据接入原则 · 用户新增目标</div><h2>本地完全离线，线上可连接也可手动下载</h2></div><span class="pill">长期目标已确认</span></div>
+        <div class="table-wrap"><table><thead><tr><th>数据类型</th><th>目标流程与具体实现</th><th>当前状态</th></tr></thead><tbody>
+          <tr><td>无需线上数据</td><td>文件导入、字段映射、标准化、计算、问题定位、手工修正和结果导出均在本机完成。运行时不依赖外部接口、CDN 或云端分析。</td><td>当前本机处理已实现；独立环境首次准备依赖可能联网，完整离线安装包后续完善。</td></tr>
+          <tr><td>线上链接接入</td><td>用户配置链接及访问所必需的登录／认证信息，工具按已配置数据源读取，随后进入同一套标准化、校验和分析流程。可设计连接测试、更新频率与失败重试。</td><td>后续数据连接阶段；当前未实现 URL 读取、自动登录或认证信息保存。</td></tr>
+          <tr><td>线上人工下载</td><td>用户自行登录线上平台、下载文件，再拖入工具或放到指定目录；从读取文件到分析、校验、手动处理和结果查看均可在本地完成。</td><td>当前文件选择、拖拽及目录扫描可承接已下载文件；仍需按实际原始导出格式配置映射。</td></tr>
+        </tbody></table></div>
+        <div class="callout">三条入口复用同一分析引擎。数据获取方式可不同，但不重复建设计算规则；线上服务临时不可用时，保留手动下载或历史本地文件的处理路径。</div>
+        <p>后续登录信息采用本机凭据引用／系统钥匙串等方式管理，按数据源单独配置，不写入看盘导出和普通分析日志。是否需要用户手动登录、支持何种认证，按实际来源适配。</p>
+      </section>
+
+      <section class="section" id="data-quality">
+        <div class="section-head"><div><div class="section-kicker">平台基础能力 · 用户新增目标</div><h2>主动发现问题数据，点击即可核对</h2></div><span class="pill">跨工具复用</span></div>
+        <p class="intro">平台需要主动识别有问题的数据，用户可以点击查看问题原因和相关数据。该能力既服务当前电商看盘，也作为后续自动化工具的共同基础。</p>
+        <div class="flow">
+          <div class="flow-step"><div class="step-no">01</div><strong>发现异常</strong><span>读取及计算时检查<br>记录影响与严重程度</span></div>
+          <div class="flow-step"><div class="step-no">02</div><strong>点击问题</strong><span>显示原因、原值<br>解释校验依据</span></div>
+          <div class="flow-step"><div class="step-no">03</div><strong>定位来源</strong><span>工作表、行与单元格<br>查看对应原始数据</span></div>
+          <div class="flow-step"><div class="step-no">04</div><strong>选择处理</strong><span>更改配置或手动修正<br>必要时保留待确认</span></div>
+          <div class="flow-step"><div class="step-no">05</div><strong>重算与追溯</strong><span>更新受影响结果<br>保留原件与调整记录</span></div>
+        </div>
+        <div class="table-wrap"><table><thead><tr><th>识别内容</th><th>点击后应看到什么</th><th>实现阶段</th></tr></thead><tbody>
+          <tr><td>日期与范围</td><td>跨年、未来日期、缺失日期、观察窗口不足的具体位置与对指标的影响。</td><td>当前原型</td></tr>
+          <tr><td>商品与单位</td><td>编码冲突、不同平台 ID、箱规缺失、无法对应商品的来源。</td><td>当前原型</td></tr>
+          <tr><td>金额与计算</td><td>源金额与明细数量乘单价的差额、金额取值模式、零分母和原表公式错误。</td><td>当前原型</td></tr>
+          <tr><td>处理状态与规则</td><td>按实际需要增加待处理／已确认／已修正、处理说明、自定义阈值和重复问题归并。</td><td>后续增强</td></tr>
+          <tr><td>自动化异常接管</td><td>自动读取失败或数据异常时，用户能定位来源、重跑或手动补正，结果仍可追溯。</td><td>自动化阶段</td></tr>
+        </tbody></table></div>
+        <div class="callout amber">异常由工具识别，不等同于已经认定业务错误。不能静默改原值；缺失数据与真实零值分别处理。规则提示与实际错误分开展示，避免把“没有提示”表达为“用户已经核对”。</div>
+      </section>
+
+      <section class="section" id="flexible-input">
+        <div class="section-head"><div><div class="section-kicker">输入适配 · 用户新增目标</div><h2>文件格式会变化，人工调配后可以继续复用</h2></div><span class="pill pending">本轮完善中</span></div>
+        <p class="intro">同类库存、销售或经营文件的表名、表头行、列顺序和布局可能改变。工具先自动识别；识别不足时，用户直接在页面调整对应关系并保存为配置，下次遇到相同格式可以复用。</p>
+        <div class="table-wrap"><table><thead><tr><th>步骤</th><th>具体实现与约束</th></tr></thead><tbody>
+          <tr><td>自动判断</td><td>检查工作表、候选表头与业务字段，识别横向日期表或逐行日期表。未识别角色、缺少日期或商品列时明确提示，不强行生成完整结果。</td></tr>
+          <tr><td>页面调配</td><td>可重新指定数据角色、工作表、表头行和字段列。原始预览与来源位置帮助用户核对；按配置重新分析，而不要求先去 Excel 改成固定模板。</td></tr>
+          <tr><td>保存复用</td><td>保存格式映射与规则参数，形成命名配置。用于新文件前检查实际工作表和列，失效映射需重新指定。当前商品的人工金额／数量修正不跟随格式配置套用。</td></tr>
+          <tr><td>边界处理</td><td>当前支持常见宽表和长表；任意多层交叉表、多个表拼在同一工作表或复杂自定义公式，不承诺自动理解。后续根据真实原始文件逐项增加适配能力。</td></tr>
+        </tbody></table></div>
+        <div class="callout">格式适配解决“从哪里读取”，业务口径解决“如何计算”。两者分别配置并随分析快照保存，避免格式变化时悄然改变指标含义。</div>
+      </section>
+
+      <section class="section" id="history">
+        <div class="section-head"><div><div class="section-kicker">持久化 · 用户新增目标</div><h2>每次结果形成快照，历史可翻看、删除也可恢复</h2></div><span class="pill">已实现</span></div>
+        <p class="intro">历史记录应在重启后继续存在。打开历史时优先呈现当次保存的结果，保留当时的配置、人工修正、数据问题和来源；不使用今天的规则静默重算过去的结果。</p>
+        <div class="details-grid">
+          <div><h3>完整、不可变的结果快照</h3><ul class="clean-list"><li>每次分析保存独立 ID、生成时间、版本、文件标识、统计期间、完整指标与商品明细。</li><li>配置、映射、手工调整、问题说明和来源信息一起保存。后续修改配置或源文件，不改写已保存快照。</li><li>历史列表支持分页与数量统计；取消自动只保留 30 条的清理逻辑，旧记录不会因新增分析自动丢失。</li><li>快照查看不依赖当前文件会话。需要打开原始数据时，按保存的来源标识定位文件；找不到或内容已变更时明确提示。</li></ul></div>
+          <div><h3>可恢复的删除</h3><ul class="clean-list"><li>普通删除将历史 JSON 从 <code>本地数据/history/</code> 移到 <code>本地数据/history_deleted/</code>；用户可在回收站翻看和恢复。</li><li>恢复后回到正常历史列表；相同 ID 已存在时拒绝覆盖，保留现有记录。</li><li>删除历史只影响分析记录，不删除原始 Excel。当前不提供永久清除或自动淘汰旧记录。</li><li>采用原子写入与并发锁，完整写好再发布；新记录不能覆盖旧快照，损坏记录也不应被悄然忽略。</li></ul></div>
+        </div>
+        <div class="callout amber">持久化、历史详情、来源定位、软删除与恢复已接入服务和页面。10项历史模块测试和15项接口测试通过，浏览器已验证删除、恢复、打开快照；正式业务口径仍需按沟通清单确认。</div>
+      </section>
+
+      <section class="section" id="implementation">
+        <div class="section-head"><div><div class="section-kicker">04 · 具体实现</div><h2>本机服务负责解析，网页负责查看与配置</h2></div><span class="pill">当前架构</span></div>
+        <div class="architecture" aria-label="当前软件架构">
+          <div class="arch-row"><div class="arch-box"><strong>原始资料</strong><span>用户原件、目录选取文件、上传归档</span></div><div class="arch-box"><strong>网页交互</strong><span>导入、看盘、筛选、配置、手动修正与 CSV 导出</span></div></div>
+          <div class="arch-connect">文件读取与分析请求 ↓　↑ 结构化结果与来源</div>
+          <div class="arch-row"><div class="arch-box main"><strong>Python 本地 HTTP 服务</strong><span>仅监听 127.0.0.1；文件会话、目录扫描、格式检查与分析记录</span></div></div>
+          <div class="arch-connect">按映射读取 → 统一商品与单位 → 按日期筛选 → 计算与校验</div>
+          <div class="arch-row"><div class="arch-box"><strong>openpyxl 分析引擎</strong><span>只读解析工作簿；独立计算指标；返回缺失、异常与来源</span></div><div class="arch-box"><strong>本地配置与历史存储</strong><span>复用配置与文件人工调整分开；完整 JSON 快照与可恢复删除，本轮集成中</span></div></div>
+        </div>
+        <div class="details-grid">
+          <div><h3>数据与映射规则</h3><ul class="clean-list"><li>按角色连接月计划、商品规格、编码对照、库存、销量、出库、报单、在途和货损；工作表名称与列字母可以调整。</li><li>商品以稳定标识关联；编码按标识符保留，简称与编码冲突明确提示，不凭不同表的相同行号关联商品。</li><li>保留大单位、箱规及小单位的区别；数量比较须采用一致单位，金额须采用匹配的单价。</li><li>辅助汇总区按商品键关联；日期明细按统计月份和截止日期筛选，源整月金额不得直接替代不匹配的部分期间。</li></ul></div>
+          <div><h3>计算与保存规则</h3><ul class="clean-list"><li>默认报单金额、85% 门槛和源金额优先是可调整的探索设置，尚不替代品牌考核确认。</li><li>无数据与真实 0 分开。零分母、缺失单价或观察天数不足时显示未计算；合计比例采用匹配范围的分子、分母计算。</li><li>年份不自动改写；开启年份对齐必须由用户主动选择，并保留提示。库存池未确认时不输出可售天数。</li><li>在途独立展示；超期只标记待确认，不直接删除或认定到货。未来日期不计入当期实际。</li><li>人工调整与源数据分开、可还原；复用配置不携带上个文件的商品人工调整。原始工作簿不改写、不执行宏。</li></ul></div>
+        </div>
+        <div class="callout amber">当前依赖 Python 3.10+ 与 openpyxl 3.1.5，前端使用原生 HTML／CSS／JavaScript。首版不依赖前端构建工具；分析快照采用本地 JSON，日记录采用 SQLite；未引入云端账户或外部采集服务。</div>
+      </section>
+
+      <section class="section" id="daily-prices">
+        <div class="section-head"><div><div class="section-kicker">每日经营数据 · 新增需求</div><h2>按日记录每款售价，关联同一天的销量</h2></div><span class="pill pending">本轮新增 · 已实现</span></div>
+        <p class="intro">用户每天维护一份价格表，次日另存后更新售价。平台应把这些文件转成可持续累积的日记录，而不是只保留最新价格。价格表格式变化时，沿用自动识别与人工映射入口。</p>
+        <div class="table-wrap"><table><thead><tr><th>能力</th><th>具体实现与边界</th></tr></thead><tbody>
+          <tr><td>按日保存</td><td>以日期、商品及适用店铺／仓库作为关联键，分别保存当日售价和销量、来源及导入时间。11月21日的新价不能覆盖11月20日记录。</td></tr>
+          <tr><td>变动格式适配</td><td>识别常见日期、商品、售价和销量列；人工选择工作表、表头行、字段列。每日快照表没有日期列时，导入前必须明确该份表的生效日期。</td></tr>
+          <tr><td>日期准确对应</td><td>只把同一天的价格与销量配对；今日售价不能直接用于昨日销量。缺少某日价格或销量时保留空缺，不擅自沿用最新价格。若一天多次变价，后续可细化时段或成交明细。</td></tr>
+          <tr><td>历史与去重</td><td>同日同商品重复导入默认跳过；价格与销量分表时可补齐空白字段，非空值冲突需核对，显式替换保留旧版本依据。支持筛选日期、商品，查看每日列表及价格／销量变化，提供手工补录、软删除与恢复。</td></tr>
+          <tr><td>金额含义</td><td>日记录的售价可能是标价，售价乘销量只可称为估算金额；实际成交额仍应来自平台成交数据，不据此推算真实利润。</td></tr>
+        </tbody></table></div>
+        <div class="callout">先建立“导入／补录 → 日期与商品匹配 → 保存日记录 → 翻看价格和销量”的闭环。涨价后销量变化可用于观察，不直接宣称价格造成销量变化。</div>
+      </section>
+
+      <section class="section" id="appearance">
+        <div class="section-head"><div><div class="section-kicker">统一UI · 全局外观</div><h2>清晰通用的界面，按个人偏好调整</h2></div><span class="pill pending">已实现 · 已验证</span></div>
+        <p class="intro">采用共享UI组件和语义主题变量，统一按钮、卡片、表格、表单、弹窗、字体与间距。提供浅色、深色、跟随系统三个显示模式；配色和字号独立选择，适应不同用户的阅读习惯。</p>
+        <div class="table-wrap"><table><thead><tr><th>能力</th><th>具体实现</th></tr></thead><tbody>
+          <tr><td>浅色／深色／系统</td><td>跟随系统时监听系统明暗变化；手动选择浅色或深色时保持所选模式。加载页面即应用已保存偏好。</td></tr>
+          <tr><td>可选配色</td><td>定位蓝灰·青绿作为默认页面色调：浅蓝灰背景、白色内容区、深靛文字和青绿色强调；经典紫作为第二组可选主题。</td></tr>
+          <tr><td>阅读与操作</td><td>标准、舒适、大号三个字号档；支持键盘操作、清晰焦点、选中状态和减少动态效果偏好；数据文本与按钮维持可读对比度。已通过16项外观自测及40次文字／按钮对比检查。</td></tr>
+          <tr><td>全局一致</td><td>看盘、历史、配置、来源预览、商品详情及每日价格页面使用同一套主题变量；切换外观不重算或改动业务数据。</td></tr>
+          <tr><td>保存偏好</td><td>外观偏好保存在当前浏览器，可恢复默认设置；与业务分析配置和人工修正分开。</td></tr>
+        </tbody></table></div>
+      </section>
+
+      <section class="section" id="product-requirements">
+        <div class="section-head"><div><div class="section-kicker">产品要求 · 本轮新增</div><h2>零售通的运行、接入与交付原则</h2></div><span class="pill">方向已记录</span></div>
+        <div class="table-wrap"><table><thead><tr><th>要求</th><th>当前策略</th><th>状态</th></tr></thead><tbody>
+          <tr><td>动态玻璃效果</td><td>外观设置中提供总开关。关闭时不使用模糊和动态效果，默认关闭；开启后对卡片、弹窗和顶栏提供轻量玻璃效果。</td><td><span class="pill">当前已实现</span></td></tr>
+          <tr><td>低负载运行</td><td>默认不轮询、不持续重算、不主动刷新页面；仅在用户操作或任务触发时读取和计算。后续引入休眠／唤醒状态，后台拉取和动画按总开关停用。</td><td><span class="pill future">架构约束</span></td></tr>
+          <tr><td>格式变更确认</td><td>每次导入和目标目录扫描都比较工作表、表头和字段映射。发现变化时先提示变化内容，由用户选择继续、调整映射或取消，避免自动误判。</td><td><span class="pill">当前部分已实现</span></td></tr>
+          <tr><td>网页定时拉取</td><td>后续支持配置 URL、地区、商品、刷新间隔和总开关，将结果展示在面板并允许下载。认证信息单独管理，失败时保留手工下载路径。</td><td><span class="pill future">后续实现</span></td></tr>
+          <tr><td>源文件读写</td><td>读取现有源文件前由用户选择；生成新文件时使用工具提供的默认格式。直接回写源文件必须有明确开关、预览和确认，默认不改源文件。</td><td><span class="pill future">后续实现</span></td></tr>
+          <tr><td>撤销与还原</td><td>重要操作采用可撤销或版本快照；删除使用可恢复回收站，配置和人工修正保留历史，后续扩展批量操作撤销。</td><td><span class="pill">已有快照／恢复</span></td></tr>
+          <tr><td>生成内容下载</td><td>当前支持 CSV 看盘导出；后续统一提供 Excel 为主的下载格式，并保留可扩展的 CSV、图片或其他报告格式。</td><td><span class="pill">部分已实现</span></td></tr>
+          <tr><td>轻量持久化</td><td>分析快照使用本地 JSON，日售价和销量使用 SQLite，操作日志使用轻量本地文件；禁止引入 MySQL 等重型数据库。历史可查询、删除和恢复。</td><td><span class="pill">当前已实现</span></td></tr>
+          <tr><td>安装与卸载</td><td>后续 Mac／Windows 应用提供简洁安装进度。普通卸载只移除应用，保留配置、日志和本地数据；彻底卸载移除应用相关数据，但绝不删除用户源文件和生成文件。</td><td><span class="pill future">桌面版后续</span></td></tr>
+        </tbody></table></div>
+        <div class="callout amber">当前仍是本地启动版。等客户确认方向可行后，再制作 Mac／Windows 应用；GitHub 发布也放在客户确认之后，仓库不携带客户源文件、本地数据、日志或凭据。</div>
+      </section>
+
+      <section class="section" id="roadmap">
+        <div class="section-head"><div><div class="section-kicker">05 · 阶段路线</div><h2>先把一次分析做可靠，再逐步减少人工操作</h2></div></div>
+        <p>各阶段以完成验收为推进依据。以下是实现路线，不承诺固定日期，也不将未来能力算入当前交付。</p>
+        <div class="roadmap">
+          <details class="phase" open><summary><span class="phase-no">v0.1</span><span class="phase-title">单文件看盘原型</span><span class="pill">当前 · 原型已交付</span></summary><div class="phase-body"><p>完成选择／拖入 Excel、目录扫描选取、映射与规则配置、看盘、异常定位、手工修正和结果导出。使用现有样例验证计算，再验证真实浏览器操作及最新版本启动。</p><div class="scope"><span>本地运行</span><span>读入一份工作簿</span><span>用户主动触发分析</span></div></div></details>
+          <details class="phase" open><summary><span class="phase-no">v0.2</span><span class="phase-title">固定真实业务口径，适配日常原始表</span><span class="pill future">后续</span></summary><div class="phase-body"><p>补齐仓库登记与平台原始导出样本，确认计划考核、库存池、折价和金额调整口径。建立稳定商品编码对照和输入配置，验证多日数据、跨月、重复导入与人工结果一致性。在本轮完整历史快照的基础上，按真实需要设计多文件合并、历史对比和输入版本管理，避免反复人工整理中间表。</p><div class="scope"><span>原始数据适配</span><span>稳定业务规则</span><span>历史与重复处理</span></div></div></details>
+          <details class="phase"><summary><span class="phase-no">v0.3</span><span class="phase-title">受控的文件自动化</span><span class="pill future">后续</span></summary><div class="phase-body"><p>在固定输入规则后，增加可配置目录监听／定时扫描、变更检测、自动重算及失败提示。明确文件未写完、重复文件、缺失文件、异常数据的处理方法；保留暂停、手动重跑和结果追溯。只有无人值守验证通过后，才称为自动读取。</p><div class="scope"><span>目录监听</span><span>调度与重试</span><span>人工接管</span></div></div></details>
+          <details class="phase"><summary><span class="phase-no">v0.4</span><span class="phase-title">URL 与其他数据来源接入</span><span class="pill future">后续评估</span></summary><div class="phase-body"><p>按实际数据源评估 URL 读取与正式接口。逐项明确访问方式、认证、更新频率、字段映射和失败恢复；沿用现有标准数据与分析接口。URL 接入不自动等同于平台登录、全站采集或后台自动操作。</p><div class="scope"><span>数据连接配置</span><span>来源适配</span><span>访问与失败恢复</span></div></div></details>
+          <details class="phase"><summary><span class="phase-no">v1.x</span><span class="phase-title">形成多个独立工具共享数据的操控台</span><span class="pill future">长期方向</span></summary><div class="phase-body"><p>根据使用频率和实际收益，扩展到货、价格、活动、采购交接等已验证场景。共享商品、库存、销量和基础配置，保持各工具可以独立使用。自定义公式、到货核销、利润核算等，须先补齐规则与验证再单独立项。</p><div class="scope"><span>按场景扩展</span><span>共享基础数据</span><span>保留手工路径</span></div></div></details>
+          <details class="phase"><summary><span class="phase-no">桌面版</span><span class="phase-title">Mac、Windows 原生应用形态</span><span class="pill future">客户试用后推进</span></summary><div class="phase-body"><p>当前先保留本地启动台形式，验证客户日常导入、判断与调整流程。方向可行后，建设 Mac、Windows 桌面应用：复用统一UI组件和主题，将文件选择、本地数据、窗口管理、安装与启动体验接入桌面容器。具体采用 Tauri、Electron 或其他方案，在打包兼容性验证后确定；不把当前浏览器页面当作已完成客户端。</p><div class="scope"><span>Mac应用</span><span>Windows应用</span><span>本地数据迁移</span></div></div></details>
+          <details class="phase"><summary><span class="phase-no">源码</span><span class="phase-title">客户确认方向可行后发布 GitHub</span><span class="pill future">有条件后续</span></summary><div class="phase-body"><p>客户认为方向可行后，再整理源码并上传 GitHub。提前区分代码、测试、交付包和本地业务数据；仓库不携带用户原始业务表、运行数据或登录凭据。当前阶段只在本地开发和交付，尚未创建或推送 GitHub 仓库。</p></div></details>
+        </div>
+      </section>
+
+      <section class="section" id="acceptance">
+        <div class="section-head"><div><div class="section-kicker">06 · 验收标准</div><h2>可运行、算得清、能核对，才完成这一版</h2></div><span class="pill pending">当前验收快照</span></div>
+        <div class="checklist">
+          <div class="check-item"><strong><span class="check-icon" aria-hidden="true">✓</span> 分析引擎行为验证</strong><p>23 项已通过：包括样例识别、自定义长表、日期边界、源金额与重算、手工零值、缺失与零的区分及原件不变。</p></div>
+          <div class="check-item"><strong><span class="check-icon" aria-hidden="true">✓</span> HTTP 与文件接口验证</strong><p>15 项已通过：覆盖服务状态、文件读取、工作簿识别、分析、预览和目录等接口；以测试空间报告为依据。</p></div>
+          <div class="check-item"><strong><span class="check-icon" aria-hidden="true">✓</span> 真实浏览器交互</strong><p>已验证：文件与目录导入、陌生格式人工映射、配置重算、手工零值与还原、单元格定位、历史删除恢复、每日价格导入及CSV导出。</p></div>
+          <div class="check-item"><strong><span class="check-icon" aria-hidden="true">✓</span> 最新版本独立交付</strong><p>已通过启动脚本语法检查并启动交付服务、生成样例看盘。交付仅17个必要文件，无旧版、自测数据和缓存；持久数据位于独立目录。</p></div>
+        </div>
+        <div class="callout">自测共65项：引擎23、HTTP接口15、历史存储10、每日价格与销量17。技术验证用于原型可用性，不能替代真实业务口径确认。</div>
+        <div class="table-wrap"><table><thead><tr><th>业务验收项</th><th>判定要求</th></tr></thead><tbody>
+          <tr><td>默认结果可信</td><td>样例严格截止日期下可生成 10 款商品的经营结果；跨年销量不可静默并入本期，未来记录不计入实际。</td></tr>
+          <tr><td>配置实际生效</td><td>更改统计日期、考核口径、门槛、金额方式或映射后，结果相应重算；保存的配置可以复用。</td></tr>
+          <tr><td>缺失与差异可见</td><td>缺数据不显示虚假 0；源金额差异、编码冲突与年份不一致可以定位，不能被空白或健康状态掩盖。</td></tr>
+          <tr><td>手工调整可追溯</td><td>调整只影响本次分析，可还原，真实 0 有效；原文件不变，其他文件不会自动继承调整。</td></tr>
+          <tr><td>正式口径稳定</td><td>使用真实原始输入与人工经营表逐项核对。尚未回答的问题继续留在沟通清单，不能因技术测试通过就认定业务已确认。</td></tr>
+        </tbody></table></div>
+      </section>
+
+      <section class="section" id="workspace">
+        <div class="section-head"><div><div class="section-kicker">07 · 工作区约定</div><h2>资料、开发、测试与交付分别保存</h2></div></div>
+        <pre class="directory" aria-label="项目目录结构">项目根目录/
+├─ 概览/        四份总规划、过程、答疑与阶段结论文档
+├─ 原始资料/    用户提供原件；导入记录保存上传原件
+├─ 开发空间/    程序、配置、启动脚本、说明与本地分析记录
+├─ 本地数据/    持久历史与日记录，升级工具不覆盖
+├─ 测试空间/    自测代码、样本、报告、运行数据与截图
+└─ 产品交付/    仅最新可运行版本与必要启动／使用文件</pre>
+        <div class="doc-cards">
+          <article class="doc-card"><a href="项目规划.html">项目规划.html · 方向基准</a><p>记录长期目标、当前范围、具体实现、阶段路线与验收条件，防止开发偏离实际用途。</p></article>
+          <article class="doc-card"><a href="task.md">task.md · 过程记录</a><p>按顺序追加每次进度、简短结论和下一步；不反复复制大段分析。</p></article>
+          <article class="doc-card"><a href="答疑文档/零售通-20261121.xlsx">答疑文档/零售通-20261121.xlsx · 日期答疑</a><p>记录待确认口径、补充资料和待处理信息，最多 5 项。解答列留给用户填写；已确认内容转入结论。</p></article>
+          <article class="doc-card"><a href="阶段性总结.md">阶段性总结.md · 重要结论</a><p>保存稳定阶段成果、详细依据、验证结论和限制，便于后续接续工作。</p></article>
+        </div>
+      </section>
+
+      <section class="section" id="decisions">
+        <div class="section-head"><div><div class="section-kicker">08 · 范围与口径</div><h2>探索可以继续，未确认之处保持透明</h2></div></div>
+        <p>当前重点沟通项是：<strong>计划考核、原始样表、库存归属、折价定义、金额取值</strong>。细节与补资料要求集中维护在 <a href="答疑文档/零售通-20261121.xlsx">答疑文档/零售通-20261121.xlsx</a>，此处不另建一套重复问答。</p>
+        <div class="details-grid">
+          <div><h3>本期持续遵守</h3><ul class="clean-list"><li>先生成能试用的看盘结果，默认设置可调整，未确认的口径不假装已有业务定论。</li><li>自动识别不足时，提供字段映射和手动补正入口，不凭空补齐数据。</li><li>每个重要指标有统计范围和来源；业务规则确认后更新配置与阶段结论。</li><li>开发、测试和交付的进展统一回写概览目录的过程与结论文档。</li></ul></div>
+          <div><h3>不纳入 v0.1.0 的能力</h3><ul class="clean-list"><li>URL 抓取、目录定时监听、跨文件自动合并和平台自动登录。</li><li>自定义公式编辑器、到货单自动核销、完整利润核算和品牌返还自动判定。</li><li>自动采购下单、活动组合优化、上架、发货或后台批量操作。</li><li>登录账户、多人权限、租户计费、云端部署与跨设备同步。</li></ul></div>
+        </div>
+      </section>
+      <footer class="footer"><span>零售通 · 项目规划 · 2026-11-21</span><span>根据实际实现与验收持续更新</span></footer>
+    </main>
+  </div>
+</body>
+</html>

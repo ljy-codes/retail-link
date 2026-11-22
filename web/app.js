@@ -22,7 +22,7 @@ async function api(url, body, method) {
   const response = await fetch(url, options);
   let data;
   try {data=await response.json();} catch {throw new Error('服务返回了无法识别的内容，请确认本地工具正常运行。');}
-  if (!response.ok || data.error) throw new Error(typeof data.error==='string'?data.error:data.message||'处理失败，请检查文件与配置。');
+  if (!response.ok || data.error) { const error=new Error(typeof data.error==='string'?data.error:data.message||'处理失败，请检查文件与配置。'); error.status=response.status; error.data=data; throw error; }
   return data;
 }
 function toast(message, error=false) {
@@ -304,6 +304,73 @@ function exportReport(){
  const rows=[['统计月份',r.period,'截止日期',r.asOf,'计划口径',basis()],['源文件',r.filename,'目标门槛',percent(state.config.targetRate),'金额模式',state.config.amountMode==='calculated'?'明细重算':'优先源表'],[],fields.map(([,label])=>label),...filteredProducts().map(product=>fields.map(([key])=>['achievement','markdownRate','lossRate'].includes(key)?percent(product[key])==='—'?'':percent(product[key]):product[key]))];
  const blob=new Blob(['\ufeff'+rows.map(row=>row.map(csvCell).join(',')).join('\r\n')],{type:'text/csv;charset=utf-8'});const link=document.createElement('a');link.href=URL.createObjectURL(blob);link.download=`电商看盘表_${r.period}_${r.asOf}.csv`;link.click();setTimeout(()=>URL.revokeObjectURL(link.href),5000);toast('已导出当前筛选下的看盘结果。');
 }
+let exportPreview=null;
+function exportXlsxModal(){
+ if(!state.result){toast('先生成一份看盘结果。',true);return;}
+ exportPreview=null;
+ const defaultName=`零售通看盘-${state.result.asOf.replaceAll('-','')}.xlsx`;
+ showModal(`<section class="modal small" role="dialog" aria-modal="true" aria-labelledby="export-title"><div class="modal-header"><div><h2 id="export-title">生成 Excel 看盘表</h2><p>先预览保存位置，再生成文件。原始工作簿保持只读。</p></div><button class="icon-btn" data-action="close-modal" aria-label="关闭">${icon('close')}</button></div><div class="modal-body"><div id="export-message" class="info-banner">${icon('info')}<span>请选择本机目录。遇到同名文件时，可改名另存或确认覆盖并保留备份。</span></div><div class="form-grid"><label class="field">保存目录<input id="export-target-dir" value="${esc(state.defaultExportDirectory||'')}" placeholder="本机现有目录的完整路径"><small>可填入其他现有目录；该目录将直接接收文件。</small></label><label class="field">文件名<input id="export-filename" value="${esc(defaultName)}"></label><label class="field">导出商品范围<select id="export-scope"><option value="all">全部商品</option><option value="filtered">当前筛选下的商品</option></select><small>筛选导出时，总览仍标明完整快照汇总口径。</small></label></div><div class="export-sheets-note">包含：看盘总览、商品明细、库存与销量、数据问题、数据来源。保存已计算结果，缺失数据留空。</div><div id="export-receipt"></div></div><div class="modal-footer"><small>重名覆盖前备份 · 写后校验</small><div><button class="btn" data-action="export-csv-from-modal">CSV 下载</button><button class="btn btn-primary" data-action="preview-xlsx">预览保存</button><button class="btn btn-primary" id="export-commit" data-action="export-xlsx" hidden>确认生成</button></div></div></section>`);
+}
+async function previewXlsx(){
+ const targetDir=$('#export-target-dir')?.value.trim(),filename=$('#export-filename')?.value.trim();
+ if(!targetDir||!filename){toast('请填写保存目录和文件名。',true);return;}
+ try{
+  const productIds=$('#export-scope').value==='filtered'?filteredProducts().map(p=>String(p.id)):null;
+  const preview=await api('/api/export/preview',{snapshotId:state.result.id,targetDir,filename,productIds});
+  exportPreview=preview;
+  $('#export-message').innerHTML=`${icon(preview.exists?'alert':'info')}<span><strong>${preview.exists?'已有同名文件':'将生成新文件'}</strong><br>${esc(preview.path)}<br>${preview.productCount} 款商品 · ${esc(preview.scope)}${preview.exists?'<br>确认后会先备份旧文件，再替换。也可改名后重新预览。':''}</span>`;
+  const button=$('#export-commit');button.hidden=false;button.textContent=preview.exists?'确认覆盖并备份':'确认生成';
+ }catch(error){exportPreview=null;toast(error.message,true);}
+}
+async function exportXlsx(){
+ if(!exportPreview){toast('请先预览保存位置。',true);return;}
+ const button=$('#export-commit');if(button)button.disabled=true;busy(true,'正在写入并校验 Excel');
+ try{
+  const result=await api('/api/export/xlsx',{token:exportPreview.token,overwrite:exportPreview.exists});
+  exportPreview=null;
+  $('#export-receipt').innerHTML=`<div class="export-receipt"><strong>已保存并通过校验</strong><p>${esc(result.path)}</p><small>${number(result.bytes/1024,1)} KB · ${esc(dateTime(result.createdAt))}<br>SHA-256：${esc(result.sha256)}</small><div class="export-receipt-actions"><a class="btn" href="/api/export/download/${encodeURIComponent(result.operationId)}" download>下载同一份 Excel</a>${result.backupPath?`<button class="btn" data-action="rollback-export" data-operation-id="${esc(result.operationId)}">恢复覆盖前版本</button>`:''}</div></div>`;
+  if(button)button.hidden=true;toast('Excel 看盘表已保存。');
+ }catch(error){exportPreview=null;if(button)button.hidden=true;toast(error.message,true);}
+ finally{if(button)button.disabled=false;busy(false);}
+}
+async function rollbackExport(operationId){
+ try{const result=await api('/api/export/rollback',{operationId,confirmed:true});toast('已恢复覆盖前版本。');if($('#export-receipt'))$('#export-receipt').innerHTML=`<div class="export-receipt"><strong>已恢复旧版本</strong><p>${esc(result.path)}</p></div>`;if($('#data-logs'))loadOperationLogs();}catch(error){toast(error.message,true);}
+}
+function collectPreferences(){
+ const read=(key,fallback)=>{try{return JSON.parse(localStorage.getItem(key)||'null')??fallback;}catch{return fallback;}};
+ return {version:1,profiles:clone(profiles),appearance:read('operator-console-appearance-v1',{}),dailyMapping:read('operator-daily-mapping-v1',{})};
+}
+function applyImportedPreferences(preferences){
+ if(!preferences)return;
+ profiles=preferences.profiles||[];localStorage.setItem(storageKey,JSON.stringify(profiles));
+ localStorage.setItem('operator-daily-mapping-v1',JSON.stringify(preferences.dailyMapping||{}));
+ window.OperatorAppearance?.applyPreferences(preferences.appearance||{});
+}
+let migrationPreview=null;
+function openDataTools(){
+ migrationPreview=null;
+ const defaultPath=state.defaultExportDirectory||'';
+ showModal(`<section class="modal" role="dialog" aria-modal="true" aria-labelledby="data-title"><div class="modal-header"><div><h2 id="data-title">本地数据与操作记录</h2><p>迁移历史、每日记录和配置，不包含用户原始 Excel 和已生成的看盘文件。</p></div><button class="icon-btn" data-action="close-modal" aria-label="关闭">${icon('close')}</button></div><div class="modal-body"><div class="form-section">迁移包</div><div class="form-grid"><label class="field">导出 ZIP 的完整路径<input id="bundle-output" value="${esc(defaultPath+'/零售通数据-'+new Date().toLocaleDateString('sv-SE')+'.zip')}"><small>默认不覆盖同名文件；可修改文件名另存。</small></label><label class="field">导入 ZIP 的完整路径<input id="bundle-input" placeholder="选择已有迁移包，填写本机完整路径"></label></div><div class="data-tool-actions"><button class="btn" data-action="bundle-export">导出本地数据与当前配置</button><button class="btn" data-action="bundle-preview">预览导入包</button></div><div id="migration-message" class="info-banner">${icon('info')}<span>先预览再导入。默认合并不覆盖；完全替换会先备份现有数据。</span></div><div id="migration-options" hidden><label class="field">冲突处理<select id="bundle-mode"><option value="merge">合并：保留已有历史；每日数据库冲突时停止</option><option value="replace">替换：替换历史、每日数据和配置，保留迁移前备份</option></select></label><button class="btn btn-primary" data-action="bundle-import">确认导入</button></div><div class="form-section">最近操作记录</div><div class="data-tool-actions"><button class="btn btn-small" data-action="refresh-operation-logs">刷新记录</button><button class="btn btn-small" data-action="save-operation-logs">保存日志到上述目录</button></div><div id="data-logs">正在读取…</div></div><div class="modal-footer"><small>JSON / SQLite / JSONL · 无后台轮询</small><div><button class="btn" data-action="close-modal">关闭</button></div></div></section>`);
+ loadOperationLogs();
+}
+async function loadOperationLogs(){
+ try{const data=await api('/api/export/logs?limit=100');const restored=new Set(data.items.filter(x=>x.operation==='rollback'&&x.result==='rolled_back').map(x=>x.sourceOperationId));if($('#data-logs'))$('#data-logs').innerHTML=data.items.length?data.items.slice().reverse().map(item=>`<div class="operation-row"><strong>${esc(({read:'读取',analyze:'分析',export:'生成Excel',rollback:'恢复版本',import:'导入迁移包',data_export:'导出迁移包',data_import:'导入迁移包',preferences_save:'保存配置',request:'请求失败',history_restore:'恢复历史',history_delete:'删除历史',daily_save:'保存每日记录',daily_delete:'删除每日记录',daily_restore:'恢复每日记录'})[item.operation]||item.operation)}</strong><span>${esc(dateTime(item.time))}</span><span>${esc(({success:'成功',started:'开始',failed:'失败',rolled_back:'已恢复',partial:'部分完成'})[item.result]||item.result||'')}</span>${((item.operation==='export'&&item.result==='success')||item.operation==='rollback'&&item.result==='rolled_back')&&item.backupPath&&!restored.has(item.operationId)?`<button class="btn btn-small" data-action="rollback-export" data-operation-id="${esc(item.operationId)}">${item.operation==='rollback'?'撤销上次恢复':'恢复覆盖前版本'}</button>`:''}</div>`).join(''):'<p>暂无操作记录。</p>';}catch(error){if($('#data-logs'))$('#data-logs').textContent=error.message;}
+}
+async function exportBundle(){
+ busy(true,'正在打包本地数据');
+ try{await api('/api/preferences',{preferences:collectPreferences()});const result=await api('/api/data/bundle',{path:$('#bundle-output').value.trim()});$('#migration-message').innerHTML=`${icon('check')}<span>迁移包已生成：${esc(result.path)}<br>${number(result.bytes/1024,1)} KB · SHA-256 ${esc(result.sha256)}</span>`;await loadOperationLogs();}catch(error){toast(error.message,true);}finally{busy(false);}
+}
+async function previewBundle(){
+ try{migrationPreview=await api('/api/data/preview',{path:$('#bundle-input').value.trim()});$('#migration-message').innerHTML=`${icon('info')}<span>导入包检查通过。<br>${esc(Object.entries(migrationPreview.counts).map(([key,value])=>(({history:'历史快照',historyDeleted:'已删除快照',dailyRecords:'每日记录',dailyRevisions:'日记录旧版',preferences:'配置',logFiles:'日志文件'})[key]||key)+' '+value).join('，'))}<br>${esc((migrationPreview.conflicts||[]).join('；')||'未发现已有数据冲突')}<br>请核对冲突处理方式，确认后开始导入。</span>`;$('#migration-options').hidden=false;}catch(error){migrationPreview=null;$('#migration-options').hidden=true;toast(error.message,true);}
+}
+async function importBundle(){
+ if(!migrationPreview){toast('请重新预览导入包。',true);return;}
+ busy(true,'正在导入并校验本地数据');
+ try{const result=await api('/api/data/import',{path:$('#bundle-input').value.trim(),token:migrationPreview.token,replace:$('#bundle-mode').value==='replace'});migrationPreview=null;applyImportedPreferences(result.preferences);$('#migration-options').hidden=true;$('#migration-message').innerHTML=`${icon('check')}<span>本地数据已导入。${result.backupPath?'<br>迁移前备份：'+esc(result.backupPath):''}<br>打开历史可查看导入结果；当前页面继续显示原来的分析快照。</span>`;await loadOperationLogs();}catch(error){toast(error.message,true);}finally{busy(false);}
+}
+async function saveOperationLogs(){
+ try{const full=$('#bundle-output')?.value.trim()||'';const directory=full.replace(/[\\/][^\\/]*$/, '');const path=directory+'/零售通操作日志-'+Date.now()+'.jsonl';const result=await api('/api/export/logs',{path});toast('操作日志已保存至 '+result.path);}catch(error){toast(error.message,true);}
+}
 
 document.addEventListener('click',async event=>{
  const target=event.target.closest('button,a,[data-product]');
@@ -331,7 +398,7 @@ document.addEventListener('click',async event=>{
   'history-next':()=>{if(state.historyHasMore)openHistory(state.historyDeleted,state.historyOffset+50);},
   'configure-pending':openPendingConfig,
   'dismiss-pending':()=>{state.pendingImport=null;render();},
-  'choose-file':()=>$('#file-input').click(),'open-import':()=>openImport(),'open-directory':()=>openImport('directory'),'close-modal':closeModal,'load-sample':loadSample,'open-config':openConfig,'close-drawer':closeDrawer,'save-product':()=>saveProduct(),'reset-product':()=>saveProduct(true),'apply-config':applyConfig,'save-profile':saveProfile,'load-profile':loadProfile,'scan-directory':scanDirectory,'export':exportReport,
+  'choose-file':()=>$('#file-input').click(),'open-import':()=>openImport(),'open-directory':()=>openImport('directory'),'close-modal':closeModal,'load-sample':loadSample,'open-config':openConfig,'close-drawer':closeDrawer,'save-product':()=>saveProduct(),'reset-product':()=>saveProduct(true),'apply-config':applyConfig,'save-profile':saveProfile,'load-profile':loadProfile,'scan-directory':scanDirectory,'export':exportXlsxModal,'preview-xlsx':previewXlsx,'open-data-tools':openDataTools,'refresh-operation-logs':loadOperationLogs,'save-operation-logs':saveOperationLogs,'bundle-export':exportBundle,'bundle-preview':previewBundle,'bundle-import':importBundle,'export-csv-from-modal':()=>{closeModal();exportReport();},'export-xlsx':exportXlsx,'rollback-export':()=>rollbackExport(target.dataset.operationId),
   'reanalyze':async()=>{try{await analyze();toast('已按当前配置重新分析。');}catch(error){toast(error.message,true);}},
   'show-issues':()=>{state.activeTab='issues';render();$('#active-panel')?.scrollIntoView({behavior:'smooth',block:'start'});},
   'preview-issue':()=>locatePreview(target.dataset.sheet,target.dataset.cell),
@@ -341,8 +408,8 @@ document.addEventListener('click',async event=>{
  };
  if(handlers[action]){try{await handlers[action]();}catch(error){toast(error.message,true);}}
 });
-document.addEventListener('input',event=>{if(event.target.id==='product-search'){state.search=event.target.value;updateProductTable();}});
-document.addEventListener('change',event=>{
+document.addEventListener('input',event=>{if(event.target.matches('#export-target-dir,#export-filename')){exportPreview=null;if($('#export-commit'))$('#export-commit').hidden=true;}if(event.target.id==='product-search'){state.search=event.target.value;updateProductTable();}});
+document.addEventListener('change',event=>{if(event.target.id==='export-scope'){exportPreview=null;if($('#export-commit'))$('#export-commit').hidden=true;}
  if(event.target.id==='file-input'){loadFile(event.target.files[0]);return;}
  if(event.target.id==='status-filter'){state.statusFilter=event.target.value;updateProductTable();return;}
  if(event.target.id==='sort-select'){state.sort=event.target.value;updateProductTable();return;}
@@ -350,6 +417,7 @@ document.addEventListener('change',event=>{
  if(event.target.hasAttribute('data-mapping-sheet')){captureConfig();renderConfig();}
 });
 document.addEventListener('keydown',event=>{
+ if(state.busy&&event.key==='Escape'){event.preventDefault();return;}
  if(event.key==='Escape'){if($('#modal-root').innerHTML)closeModal();else closeDrawer();}
  if((event.key==='Enter'||event.key===' ')&&event.target.matches('tr[data-product]')){event.preventDefault();openProduct(event.target.dataset.product);}
  if(event.key==='Enter'&&event.target.id==='directory-path')scanDirectory();
@@ -366,4 +434,4 @@ document.addEventListener('dragleave',event=>{event.preventDefault();dragDepth--
 document.addEventListener('drop',event=>{event.preventDefault();dragDepth=0;$('#drag-overlay').hidden=true;if(state.busy)return;const files=[...(event.dataTransfer?.files||[])];const file=files.find(file=>/\.(xlsx|xlsm)$/i.test(file.name));if(file){if(files.length>1)toast('本次先分析一份工作簿，其他文件可随后导入。');loadFile(file);}else if(files.length)toast('请拖入 .xlsx 或 .xlsm 工作簿。',true);});
 
 render();
-api('/api/health').then(data=>{state.sampleAvailable=data.sampleAvailable!==false;state.defaultDirectory=data.defaultDirectory||'';if(!state.result)render();}).catch(()=>toast('暂时无法连接本地服务，请检查启动窗口是否仍在运行。',true));
+api('/api/health').then(data=>{state.sampleAvailable=data.sampleAvailable!==false;state.defaultDirectory=data.defaultDirectory||'';state.defaultExportDirectory=data.defaultExportDirectory||'';if(!state.result)render();}).catch(()=>toast('暂时无法连接本地服务，请检查启动窗口是否仍在运行。',true));

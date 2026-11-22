@@ -13,3 +13,9 @@ __pycache__/
 测试空间/
 开发空间/
 概览/答疑文档/
+
+# Generated local exports
+生成文件/
+examples/*.xlsx
+examples/*.xlsm
+*.zip

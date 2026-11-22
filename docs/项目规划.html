@@ -31,7 +31,7 @@
       </div>
       <aside class="status-card" aria-label="版本状态">
         <div class="label">当前版本状态</div>
-        <div class="status"><span class="dot" aria-hidden="true"></span><span id="release-status">v0.1.1 外观增强版</span></div>
+        <div class="status"><span class="dot" aria-hidden="true"></span><span id="release-status">v0.1.2 本地文件与数据迁移原型</span></div>
         <div class="date">规划更新：2026-11-21 · Asia/Shanghai</div>
       </aside>
     </div>
@@ -50,6 +50,7 @@
       <a href="#daily-prices"><span class="num">＋</span> 每日售价与销量</a>
       <a href="#appearance"><span class="num">＋</span> 外观与阅读</a>
       <a href="#product-requirements"><span class="num">＋</span> 产品运行要求</a>
+      <a href="#local-files"><span class="num">＋</span> 本地文件与迁移</a>
       <a href="#roadmap"><span class="num">05</span> 阶段路线</a>
       <a href="#connectivity"><span class="num">＋</span> 离线与线上</a>
       <a href="#data-quality"><span class="num">＋</span> 问题数据查看</a>
@@ -82,7 +83,7 @@
       </section>
 
       <section class="section" id="scope">
-        <div class="section-head"><div><div class="section-kicker">02 · 当前版本</div><h2>v0.1.1：选择 Excel，生成电商看盘表</h2></div><span class="pill">已实现 · 已验证</span></div>
+        <div class="section-head"><div><div class="section-kicker">02 · 当前版本</div><h2>v0.1.2：看盘结果可保存和迁移</h2></div><span class="pill">已实现 · 已验证</span></div>
         <p>用户明确先做 <strong>库存与销量计算、每日经营表</strong>。本版围绕这两个结果构建文件导入、映射配置、异常提示和手工修正。</p>
         <div class="table-wrap"><table><thead><tr><th style="width:20%">能力</th><th>当前具体范围</th><th style="width:15%">状态</th></tr></thead><tbody>
           <tr><td>文件入口</td><td>选择或拖入 <code>.xlsx</code>、<code>.xlsm</code>；提供现有样例入口；输入本机目录路径，扫描后选择一个文件分析。</td><td><span class="pill">已实现</span></td></tr>
@@ -90,7 +91,7 @@
           <tr><td>经营看盘</td><td>月计划与报单达成、距目标差额、出库与供价金额、折扣比例／折价幅度、货损金额与货损率。</td><td><span class="pill">已实现</span></td></tr>
           <tr><td>库存与销量</td><td>现货与在途分开展示；按统计期间筛选销量，计算完整观察窗口的日均销量；库存池确认后计算现货可售天数。</td><td><span class="pill">已实现</span></td></tr>
           <tr><td>核对与人工补正</td><td>显示日期、编码、源金额与明细差异；可预览原表、查看单元格来源；支持修正商品计划、现货数量／金额、供价和货损金额，并可还原。</td><td><span class="pill">已实现</span></td></tr>
-          <tr><td>结果与配置保存</td><td>可复用口径和字段配置保存在当前浏览器；分析结果与当次配置保存在本地记录；导出当前商品看盘结果为 CSV。</td><td><span class="pill">已实现</span></td></tr>
+          <tr><td>结果与配置保存</td><td>可复用口径和字段配置保存在当前浏览器；分析结果与当次配置保存在本地记录；预览后将五工作表 Excel 保存到指定现有目录，保留 CSV 下载，并支持应用数据迁移。</td><td><span class="pill">已实现</span></td></tr>
           <tr><td>完整使用验证</td><td>65项自测通过；已在浏览器验证导入、人工映射、配置、手修、原表定位、历史删除恢复、CSV导出与每日记录，并启动交付版本。</td><td><span class="pill">已验证</span></td></tr>
         </tbody></table></div>
         <div class="callout">当前的“目录读取”是扫描并手动选择文件。目录定时监听、无人值守刷新与 URL 读取属于后续阶段。</div>
@@ -164,7 +165,7 @@
       <section class="section" id="implementation">
         <div class="section-head"><div><div class="section-kicker">04 · 具体实现</div><h2>本机服务负责解析，网页负责查看与配置</h2></div><span class="pill">当前架构</span></div>
         <div class="architecture" aria-label="当前软件架构">
-          <div class="arch-row"><div class="arch-box"><strong>原始资料</strong><span>用户原件、目录选取文件、上传归档</span></div><div class="arch-box"><strong>网页交互</strong><span>导入、看盘、筛选、配置、手动修正与 CSV 导出</span></div></div>
+          <div class="arch-row"><div class="arch-box"><strong>原始资料</strong><span>用户原件、目录选取文件、上传归档</span></div><div class="arch-box"><strong>网页交互</strong><span>导入、看盘、配置、Excel 保存、恢复和数据迁移</span></div></div>
           <div class="arch-connect">文件读取与分析请求 ↓　↑ 结构化结果与来源</div>
           <div class="arch-row"><div class="arch-box main"><strong>Python 本地 HTTP 服务</strong><span>仅监听 127.0.0.1；文件会话、目录扫描、格式检查与分析记录</span></div></div>
           <div class="arch-connect">按映射读取 → 统一商品与单位 → 按日期筛选 → 计算与校验</div>
@@ -196,7 +197,7 @@
         <div class="table-wrap"><table><thead><tr><th>能力</th><th>具体实现</th></tr></thead><tbody>
           <tr><td>浅色／深色／系统</td><td>跟随系统时监听系统明暗变化；手动选择浅色或深色时保持所选模式。加载页面即应用已保存偏好。</td></tr>
           <tr><td>可选配色</td><td>定位蓝灰·青绿作为默认页面色调：浅蓝灰背景、白色内容区、深靛文字和青绿色强调；经典紫作为第二组可选主题。</td></tr>
-          <tr><td>最新设计方向（2026-11-22，待落地）</td><td>基于配色知识库选定“墨蓝·青绿”：主按钮墨蓝 <code>#1F4E79</code>、数据强调青绿 <code>#0F766E</code>，经典紫降级为图表辅助色；图标推荐“货箱 + 上升柱”。方案见 <code>配色集合/零售通-配色与图标方案-20261122.md</code>。当前代码仍为 v0.1.1 两套配色，后续再落地 token 与多尺寸图标。</td></tr>
+          <tr><td>最新设计方向（2026-11-22，待落地）</td><td>基于配色知识库选定“墨蓝·青绿”：主按钮墨蓝 <code>#1F4E79</code>、数据强调青绿 <code>#0F766E</code>，经典紫降级为图表辅助色；图标推荐“货箱 + 上升柱”。方案见 <code>配色集合/零售通-配色与图标方案-20261122.md</code>。当前代码仍沿用两套配色，后续再落地 token 与多尺寸图标。</td></tr>
           <tr><td>阅读与操作</td><td>标准、舒适、大号三个字号档；支持键盘操作、清晰焦点、选中状态和减少动态效果偏好；数据文本与按钮维持可读对比度。已通过16项外观自测及40次文字／按钮对比检查。</td></tr>
           <tr><td>全局一致</td><td>看盘、历史、配置、来源预览、商品详情及每日价格页面使用同一套主题变量；切换外观不重算或改动业务数据。</td></tr>
           <tr><td>保存偏好</td><td>外观偏好保存在当前浏览器，可恢复默认设置；与业务分析配置和人工修正分开。</td></tr>
@@ -212,11 +213,24 @@
           <tr><td>网页定时拉取</td><td>后续支持配置 URL、地区、商品、刷新间隔和总开关，将结果展示在面板并允许下载。认证信息单独管理，失败时保留手工下载路径。</td><td><span class="pill future">后续实现</span></td></tr>
           <tr><td>源文件读写</td><td>读取现有源文件前由用户选择；生成新文件时使用工具提供的默认格式。直接回写源文件必须有明确开关、预览和确认，默认不改源文件。</td><td><span class="pill future">后续实现</span></td></tr>
           <tr><td>撤销与还原</td><td>重要操作采用可撤销或版本快照；删除使用可恢复回收站，配置和人工修正保留历史，后续扩展批量操作撤销。</td><td><span class="pill">已有快照／恢复</span></td></tr>
-          <tr><td>生成内容下载</td><td>当前支持 CSV 看盘导出；后续统一提供 Excel 为主的下载格式，并保留可扩展的 CSV、图片或其他报告格式。</td><td><span class="pill">部分已实现</span></td></tr>
+          <tr><td>生成内容下载</td><td>当前支持多工作表 Excel 保存与下载，保留 CSV。筛选导出会标明明细范围和总览口径；源文件不改写。</td><td><span class="pill">部分已实现</span></td></tr>
           <tr><td>轻量持久化</td><td>分析快照使用本地 JSON，日售价和销量使用 SQLite，操作日志使用轻量本地文件；禁止引入 MySQL 等重型数据库。历史可查询、删除和恢复。</td><td><span class="pill">当前已实现</span></td></tr>
           <tr><td>安装与卸载</td><td>后续 Mac／Windows 应用提供简洁安装进度。普通卸载只移除应用，保留配置、日志和本地数据；彻底卸载移除应用相关数据，但绝不删除用户源文件和生成文件。</td><td><span class="pill future">桌面版后续</span></td></tr>
         </tbody></table></div>
         <div class="callout amber">当前仍是本地启动版。等客户确认方向可行后，再制作 Mac／Windows 应用；GitHub 发布也放在客户确认之后，仓库不携带客户源文件、本地数据、日志或凭据。</div>
+      </section>
+
+      <section class="section" id="local-files">
+        <div class="section-head"><div><div class="section-kicker">v0.1.2 · 本轮实现</div><h2>本地 Excel 生成与应用数据迁移</h2></div><span class="pill">原型已验证</span></div>
+        <div class="table-wrap"><table><thead><tr><th>功能</th><th>已实现</th><th>限制</th></tr></thead><tbody>
+          <tr><td>标准 Excel</td><td>按已保存快照生成看盘总览、商品明细、库存与销量、数据问题、数据来源；缺失空白、编码文本、比率数值格式。</td><td>输出静态结果，不替代业务口径确认，不重算原工作簿公式。</td></tr>
+          <tr><td>保存与覆盖</td><td>用户填写现有目录及文件名，先预览后确认；默认不覆盖。同名覆盖先验证备份，再同目录原子发布，发布前后重新读取逐格校验。</td><td>目录入口当前采用完整路径输入；未增加原生系统目录选择器。禁止回写原始业务表。</td></tr>
+          <tr><td>恢复与撤销</td><td>覆盖后的生成文件可恢复上一版；恢复操作也保留反向版本，可再次撤销。目标或备份被外部改动时拒绝覆盖。</td><td>应用数据迁移替换前保留备份，尚未提供成功迁移的一键撤销入口。</td></tr>
+          <tr><td>日志</td><td>读取、分析、生成、历史／日记录修改、恢复、迁移与失败写入JSONL，页面可看最近记录并导出日志文件。</td><td>元数据日志不写商品明细、密码或Token；暂无自动轮转与清理策略。</td></tr>
+          <tr><td>迁移包</td><td>包含历史、已删除历史、SQLite日记录／旧版、浏览器配置／映射／外观和归档日志；SQLite使用backup快照，ZIP包含清单与哈希。</td><td>不包含用户源Excel、生成文件和本机导出恢复指令；用户自行保留这些文件。</td></tr>
+          <tr><td>安全导入</td><td>预览数量和冲突，用户选择合并或替换；替换前备份，中途失败恢复旧数据。检查ZIP路径、版本、哈希、JSON和SQLite结构。</td><td>日记录数据库冲突须明确替换，不自动混合两侧数据；恢复策略可在后续扩展。</td></tr>
+        </tbody></table></div>
+        <p>验证：新增导出18项、迁移14项、HTTP闭环6项全部通过；已有HTTP15项回归通过。浏览器已走通保存、同名覆盖、恢复、下载、打包和确认导入。源文件哈希保持不变。</p>
       </section>
 
       <section class="section" id="roadmap">
@@ -229,7 +243,7 @@
           <details class="phase"><summary><span class="phase-no">v0.4</span><span class="phase-title">URL 与其他数据来源接入</span><span class="pill future">后续评估</span></summary><div class="phase-body"><p>按实际数据源评估 URL 读取与正式接口。逐项明确访问方式、认证、更新频率、字段映射和失败恢复；沿用现有标准数据与分析接口。URL 接入不自动等同于平台登录、全站采集或后台自动操作。</p><div class="scope"><span>数据连接配置</span><span>来源适配</span><span>访问与失败恢复</span></div></div></details>
           <details class="phase"><summary><span class="phase-no">v1.x</span><span class="phase-title">形成多个独立工具共享数据的操控台</span><span class="pill future">长期方向</span></summary><div class="phase-body"><p>根据使用频率和实际收益，扩展到货、价格、活动、采购交接等已验证场景。共享商品、库存、销量和基础配置，保持各工具可以独立使用。自定义公式、到货核销、利润核算等，须先补齐规则与验证再单独立项。</p><div class="scope"><span>按场景扩展</span><span>共享基础数据</span><span>保留手工路径</span></div></div></details>
           <details class="phase"><summary><span class="phase-no">桌面版</span><span class="phase-title">Mac、Windows 原生应用形态</span><span class="pill future">客户试用后推进</span></summary><div class="phase-body"><p>当前先保留本地启动台形式，验证客户日常导入、判断与调整流程。方向可行后，建设 Mac、Windows 桌面应用：复用统一UI组件和主题，将文件选择、本地数据、窗口管理、安装与启动体验接入桌面容器。具体采用 Tauri、Electron 或其他方案，在打包兼容性验证后确定；不把当前浏览器页面当作已完成客户端。</p><div class="scope"><span>Mac应用</span><span>Windows应用</span><span>本地数据迁移</span></div></div></details>
-          <details class="phase"><summary><span class="phase-no">源码</span><span class="phase-title">客户确认方向可行后发布 GitHub</span><span class="pill future">有条件后续</span></summary><div class="phase-body"><p>客户认为方向可行后，再整理源码并上传 GitHub。提前区分代码、测试、交付包和本地业务数据；仓库不携带用户原始业务表、运行数据或登录凭据。当前阶段只在本地开发和交付，尚未创建或推送 GitHub 仓库。</p></div></details>
+          <details class="phase"><summary><span class="phase-no">源码</span><span class="phase-title">客户确认方向可行后发布 GitHub</span><span class="pill future">有条件后续</span></summary><div class="phase-body"><p>客户认为方向可行后，再整理源码并上传 GitHub。提前区分代码、测试、交付包和本地业务数据；仓库不携带用户原始业务表、运行数据或登录凭据。GitHub已按用户后续授权推送至 ljy-codes/retail-link；源码与概览持续同步，原始业务表和运行数据不入库。</p></div></details>
         </div>
       </section>
 
@@ -239,7 +253,7 @@
           <div class="check-item"><strong><span class="check-icon" aria-hidden="true">✓</span> 分析引擎行为验证</strong><p>23 项已通过：包括样例识别、自定义长表、日期边界、源金额与重算、手工零值、缺失与零的区分及原件不变。</p></div>
           <div class="check-item"><strong><span class="check-icon" aria-hidden="true">✓</span> HTTP 与文件接口验证</strong><p>15 项已通过：覆盖服务状态、文件读取、工作簿识别、分析、预览和目录等接口；以测试空间报告为依据。</p></div>
           <div class="check-item"><strong><span class="check-icon" aria-hidden="true">✓</span> 真实浏览器交互</strong><p>已验证：文件与目录导入、陌生格式人工映射、配置重算、手工零值与还原、单元格定位、历史删除恢复、每日价格导入及CSV导出。</p></div>
-          <div class="check-item"><strong><span class="check-icon" aria-hidden="true">✓</span> 最新版本独立交付</strong><p>已通过启动脚本语法检查并启动交付服务、生成样例看盘。交付仅17个必要文件，无旧版、自测数据和缓存；持久数据位于独立目录。</p></div>
+          <div class="check-item"><strong><span class="check-icon" aria-hidden="true">✓</span> 最新版本独立交付</strong><p>已通过启动脚本语法检查并启动交付服务、生成样例看盘。交付仅19个必要文件，无旧版、自测数据和缓存；持久数据位于独立目录。</p></div>
         </div>
         <div class="callout">自测共65项：引擎23、HTTP接口15、历史存储10、每日价格与销量17。技术验证用于原型可用性，不能替代真实业务口径确认。</div>
         <div class="table-wrap"><table><thead><tr><th>业务验收项</th><th>判定要求</th></tr></thead><tbody>
@@ -258,6 +272,7 @@
 ├─ 原始资料/    用户提供原件；导入记录保存上传原件
 ├─ 开发空间/    程序、配置、启动脚本、说明与本地分析记录
 ├─ 本地数据/    持久历史与日记录，升级工具不覆盖
+├─ 生成文件/    默认保存看盘和迁移输出，不随版本覆盖
 ├─ 测试空间/    自测代码、样本、报告、运行数据与截图
 └─ 产品交付/    仅最新可运行版本与必要启动／使用文件</pre>
         <div class="doc-cards">

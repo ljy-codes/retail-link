@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import re
 import sys
+import secrets
 sys.dont_write_bytecode = True
 import threading
 import time
@@ -18,22 +19,75 @@ import traceback
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, unquote, urlparse
+from urllib.parse import quote
 import webbrowser
 import zipfile
 
 APP_DIR = Path(__file__).resolve().parent
-PROJECT_DIR = APP_DIR.parent
+PROJECT_DIR = APP_DIR
 WEB_DIR = APP_DIR / "web"
 DATA_DIR = PROJECT_DIR / "本地数据"
-ORIGINAL_DIR = PROJECT_DIR / "原始资料"
+ORIGINAL_DIR = PROJECT_DIR / "examples"
 SAMPLE = ORIGINAL_DIR / "样例.xlsx"
-VERSION = "0.1.1"
+VERSION = "0.1.2"
 MAX_UPLOAD = 30 * 1024 * 1024
 MAX_BODY = (MAX_UPLOAD * 4 // 3) + 1024 * 1024
 WORKBOOKS: dict[str, dict] = {}
 WORKBOOK_LOCK = threading.RLock()
 HISTORY_STORES: dict[Path, object] = {}
 HISTORY_LOCK = threading.RLock()
+EXPORT_SERVICES: dict[Path, object] = {}
+EXPORT_LOCK = threading.RLock()
+IO_LOCK = threading.RLock()
+EXPORT_PREVIEWS = {}
+MIGRATION_SERVICES = {}
+
+
+def migration_service():
+    from backend.migration_service import MigrationService
+    directory = DATA_DIR.expanduser().resolve()
+    if directory not in MIGRATION_SERVICES:
+        MIGRATION_SERVICES[directory] = MigrationService(directory, audit=export_service().log_operation, app_version=VERSION)
+    return MIGRATION_SERVICES[directory]
+
+
+def preview_export(body):
+    from backend.export_service import ExportService
+    snapshot = history_store().get(body.get("snapshotId", ""))
+    selected = body.get("productIds")
+    if selected is not None:
+        if not isinstance(selected, list) or not selected:
+            raise ValueError("当前筛选没有可导出的商品。")
+        selected = set(map(str, selected))
+        snapshot["products"] = [p for p in snapshot["products"] if str(p["id"]) in selected]
+        if not snapshot["products"]:
+            raise ValueError("当前筛选没有可导出的商品。")
+        # Retain whole-snapshot overview explicitly; detail is the selected scope.
+        snapshot["exportScope"] = "所选商品明细；总览保留完整分析快照汇总"
+    else:
+        snapshot["exportScope"] = "完整分析快照"
+    directory = Path(str(body.get("targetDir", ""))).expanduser().resolve()
+    if not directory.is_dir():
+        raise ValueError("目标目录不存在，请选择一个现有目录。")
+    target = directory / ExportService._safe_filename(body.get("filename"))
+    if target.is_symlink():
+        raise ValueError("目标不能是符号链接。")
+    # Generated outputs cannot overwrite any known input or managed runtime file.
+    if target.is_relative_to(ORIGINAL_DIR.resolve()) or target.is_relative_to(DATA_DIR.resolve()) or target.is_relative_to(APP_DIR.resolve()):
+        raise ValueError("请选择独立的生成文件目录，避免覆盖原始资料或应用数据。")
+    for entry in WORKBOOKS.values():
+        if target == entry["path"]:
+            raise ValueError("不能覆盖已导入的源工作簿。")
+    before = hashlib.sha256(target.read_bytes()).hexdigest() if target.is_file() else None
+    token = secrets.token_urlsafe(24)
+    now = time.monotonic()
+    for key, value in list(EXPORT_PREVIEWS.items()):
+        if now - value["created"] > 600:
+            EXPORT_PREVIEWS.pop(key, None)
+    EXPORT_PREVIEWS[token] = {"created": now, "result": snapshot, "target": target, "before": before}
+    return {"token": token, "path": str(target), "exists": before is not None,
+            "productCount": len(snapshot["products"]), "scope": snapshot["exportScope"],
+            "sheets": list(ExportService.SHEETS), "snapshotId": snapshot["id"]}
 
 
 def engine():
@@ -49,6 +103,15 @@ def history_store():
         if directory not in HISTORY_STORES:
             HISTORY_STORES[directory] = HistoryStore(directory)
         return HISTORY_STORES[directory]
+
+
+def export_service():
+    from backend.export_service import ExportService
+    directory = DATA_DIR.expanduser().resolve()
+    with EXPORT_LOCK:
+        if directory not in EXPORT_SERVICES:
+            EXPORT_SERVICES[directory] = ExportService(directory, VERSION)
+        return EXPORT_SERVICES[directory]
 
 
 def history_detail(identifier, deleted=False):
@@ -114,6 +177,7 @@ def register_workbook(path: Path, display_name=None):
         }
     inspected.update({"workbookId": workbook_id, "filename": display_name or path.name,
                       "sourcePath": str(path), "sha256": digest})
+    export_service().log_operation("read", {"source": str(path), "sha256": digest, "bytes": path.stat().st_size, "result": "success"})
     return inspected
 
 
@@ -138,6 +202,12 @@ class Handler(BaseHTTPRequestHandler):
         print(f"[{datetime.now().strftime('%H:%M:%S')}] {fmt % args}", flush=True)
 
     def send_json(self, value, status=200):
+        self.response_status = status
+        if status >= 400:
+            try:
+                export_service().log_operation("request", {"errorCode": "HTTP_" + str(status), "sourceId": urlparse(self.path).path, "result": "failed"})
+            except OSError:
+                pass
         body = json_bytes(value)
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -165,18 +235,28 @@ class Handler(BaseHTTPRequestHandler):
         except ImportError:
             self.send_json({"error": "每日售价与销量模块尚未就绪。"}, 503)
             return True
-        return handle_daily_request(handler=self, method=method, path=parsed.path,
+        handled = handle_daily_request(handler=self, method=method, path=parsed.path,
                                     query=parse_qs(parsed.query), body=body,
                                     data_dir=DATA_DIR, lookup=get_workbook)
+        if handled and method in {"POST", "DELETE"} and getattr(self, "response_status", 500) < 400:
+            if not (parsed.path == "/api/daily/import" and (body or {}).get("previewOnly", True)):
+                export_service().log_operation("daily_" + ("delete" if method == "DELETE" else "restore" if parsed.path.endswith("/restore") else "save"),
+                    {"result": "success", "sourceId": parsed.path})
+        return handled
 
     def do_GET(self):
+        with IO_LOCK:
+            self._do_GET()
+
+    def _do_GET(self):
         parsed = urlparse(self.path)
         try:
             if parsed.path == "/api/health":
                 return self.send_json({"app": "零售通", "version": VERSION,
                                        "sampleAvailable": SAMPLE.is_file(),
                                        "defaultDirectory": str(ORIGINAL_DIR),
-                                       "capabilities": ["excel", "directory", "manual", "mapping", "history"]})
+                                       "defaultExportDirectory": str(PROJECT_DIR / "生成文件"),
+                                       "capabilities": ["excel", "directory", "manual", "mapping", "history", "local_export", "migration"]})
             if self.dispatch_daily("GET", parsed):
                 return
             if parsed.path == "/api/sample":
@@ -193,6 +273,29 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json(history_store().list(
                     offset=query.get("offset", [0])[0], limit=query.get("limit", [50])[0],
                     deleted=query.get("deleted", ["0"])[0] == "1"))
+            if parsed.path == "/api/preferences":
+                return self.send_json({"preferences": migration_service().load_preferences()})
+            if parsed.path.startswith("/api/export/download/"):
+                operation_id = parsed.path.removeprefix("/api/export/download/")
+                entry = next((item for item in export_service().list_logs(operation_id=operation_id, limit=1000)
+                              if item.get("operation") == "export" and item.get("result") == "success"), None)
+                if not entry:
+                    raise ValueError("导出记录不存在，请重新生成。")
+                target = Path(entry["target"])
+                if not target.is_file() or target.is_symlink() or hashlib.sha256(target.read_bytes()).hexdigest() != entry["sha256"]:
+                    raise ValueError("导出文件已变化或不存在，请重新生成。")
+                payload = target.read_bytes()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                self.send_header("Content-Disposition", "attachment; filename*=UTF-8''" + quote(target.name))
+                self.send_header("Content-Length", str(len(payload)))
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                self.wfile.write(payload)
+                return
+            if parsed.path == "/api/export/logs":
+                query = parse_qs(parsed.query)
+                return self.send_json({"items": export_service().list_logs(limit=query.get("limit", [200])[0])})
             if parsed.path.startswith("/api/history/"):
                 query = parse_qs(parsed.query)
                 identifier = parsed.path.removeprefix("/api/history/")
@@ -223,6 +326,10 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"error": f"读取失败：{exc}"}, 500)
 
     def do_POST(self):
+        with IO_LOCK:
+            self._do_POST()
+
+    def _do_POST(self):
         try:
             if not self.origin_allowed():
                 return
@@ -238,9 +345,48 @@ class Handler(BaseHTTPRequestHandler):
             route = parsed.path
             if self.dispatch_daily("POST", parsed, body):
                 return
+            if route == "/api/export/preview":
+                return self.send_json(preview_export(body))
+            if route == "/api/export/xlsx":
+                from backend.export_service import AlreadyExistsError
+                token = body.get("token", "")
+                pending = EXPORT_PREVIEWS.get(token)
+                if not pending or time.monotonic() - pending["created"] > 600:
+                    raise ValueError("导出预览已失效，请重新预览后确认。")
+                target = pending["target"]
+                before = hashlib.sha256(target.read_bytes()).hexdigest() if target.is_file() else None
+                if before != pending["before"] or target.is_symlink():
+                    raise ValueError("目标文件在预览后发生变化，请重新预览。")
+                if before is not None and body.get("overwrite") is not True:
+                    return self.send_json({"error": "存在同名文件，请另存或明确确认覆盖。", "code": "ALREADY_EXISTS"}, 409)
+                try:
+                    result = export_service().create_xlsx(pending["result"], target.parent, target.name, overwrite=before is not None)
+                except AlreadyExistsError as exc:
+                    return self.send_json({"error": str(exc), "code": "ALREADY_EXISTS"}, 409)
+                EXPORT_PREVIEWS.pop(token, None)
+                return self.send_json(result)
+            if route == "/api/export/rollback":
+                if body.get("confirmed") is not True:
+                    raise ValueError("请确认恢复覆盖前版本。")
+                return self.send_json(export_service().rollback(str(body.get("operationId", ""))))
+            if route == "/api/export/logs":
+                return self.send_json(export_service().export_logs(body.get("path")))
+            if route == "/api/preferences":
+                return self.send_json(migration_service().save_preferences(body.get("preferences")))
+            if route == "/api/data/bundle":
+                return self.send_json(migration_service().export_bundle(body.get("path")))
+            if route == "/api/data/preview":
+                return self.send_json(migration_service().preview_import(body.get("path")))
+            if route == "/api/data/import":
+                result = migration_service().import_bundle(body.get("path"), replace=body.get("replace") is True,
+                    confirmation_token=body.get("token"))
+                HISTORY_STORES.clear()
+                return self.send_json(result)
             restore_match = re.fullmatch(r"/api/history/([0-9]{1,64})/restore", route)
             if restore_match:
-                return self.send_json(history_store().restore(restore_match.group(1)))
+                result = history_store().restore(restore_match.group(1))
+                export_service().log_operation("history_restore", {"sourceId": result["id"], "result": "success"})
+                return self.send_json(result)
             if route == "/api/inspect":
                 filename = Path(str(body.get("filename", ""))).name
                 if Path(filename).suffix.lower() not in {".xlsx", ".xlsm"}:
@@ -294,7 +440,9 @@ class Handler(BaseHTTPRequestHandler):
                 result["appVersion"] = VERSION
                 result["sourceInfo"] = {"path": str(entry["path"]), "sha256": entry["sha256"],
                                         "filename": entry["filename"]}
-                return self.send_json(history_store().save(result))
+                saved = history_store().save(result)
+                export_service().log_operation("analyze", {"source": str(entry["path"]), "snapshotId": saved["id"], "result": "success"})
+                return self.send_json(saved)
             self.send_json({"error": "接口不存在。"}, 404)
         except (ValueError, FileNotFoundError, KeyError, PermissionError) as exc:
             self.send_json({"error": str(exc)}, 400)
@@ -305,6 +453,10 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"error": f"分析失败：{exc}"}, 500)
 
     def do_DELETE(self):
+        with IO_LOCK:
+            self._do_DELETE()
+
+    def _do_DELETE(self):
         try:
             if not self.origin_allowed():
                 return
@@ -313,7 +465,9 @@ class Handler(BaseHTTPRequestHandler):
                 return
             delete_match = re.fullmatch(r"/api/history/([0-9]{1,64})", parsed.path)
             if delete_match:
-                return self.send_json(history_store().delete(delete_match.group(1)))
+                result = history_store().delete(delete_match.group(1))
+                export_service().log_operation("history_delete", {"sourceId": result["id"], "result": "success"})
+                return self.send_json(result)
             self.send_json({"error": "接口不存在。"}, 404)
         except (ValueError, FileNotFoundError, KeyError, PermissionError) as exc:
             self.send_json({"error": str(exc)}, 400)
@@ -337,6 +491,7 @@ def main():
     if args.original_dir:
         ORIGINAL_DIR = args.original_dir.expanduser().resolve()
         SAMPLE = ORIGINAL_DIR / "样例.xlsx"
+    (PROJECT_DIR / "生成文件").mkdir(exist_ok=True)
     try:
         import openpyxl  # noqa: F401
     except ImportError:

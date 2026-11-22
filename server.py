@@ -22,10 +22,10 @@ import webbrowser
 import zipfile
 
 APP_DIR = Path(__file__).resolve().parent
-PROJECT_DIR = APP_DIR
+PROJECT_DIR = APP_DIR.parent
 WEB_DIR = APP_DIR / "web"
 DATA_DIR = PROJECT_DIR / "本地数据"
-ORIGINAL_DIR = PROJECT_DIR / "examples"
+ORIGINAL_DIR = PROJECT_DIR / "原始资料"
 SAMPLE = ORIGINAL_DIR / "样例.xlsx"
 VERSION = "0.1.1"
 MAX_UPLOAD = 30 * 1024 * 1024

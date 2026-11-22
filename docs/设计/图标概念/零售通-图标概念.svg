@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="820" viewBox="0 0 1400 820">
+  <defs>
+    <linearGradient id="bgA" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#102C46"/>
+      <stop offset="1" stop-color="#071426"/>
+    </linearGradient>
+    <linearGradient id="barA" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#0F766E"/>
+      <stop offset="1" stop-color="#2DD4BF"/>
+    </linearGradient>
+    <linearGradient id="bgB" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0B1F3A"/>
+      <stop offset="1" stop-color="#102C46"/>
+    </linearGradient>
+    <linearGradient id="arrowB" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#2F6BFF"/>
+      <stop offset="1" stop-color="#2DD4BF"/>
+    </linearGradient>
+    <filter id="softShadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="14" stdDeviation="18" flood-color="#0B1F3A" flood-opacity="0.18"/>
+    </filter>
+  </defs>
+
+  <rect width="1400" height="820" fill="#F7F9FC"/>
+  <text x="80" y="72" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="34" font-weight="650" fill="#16202A">零售通 · 软件图标方向</text>
+  <text x="80" y="112" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="18" fill="#667085">深蓝底 · 青绿数据 · 白色高光；2–3 色，16px 仍可辨认；不放文字、不用 Excel 网格、不用购物车。</text>
+
+  <!-- A: box + ascending bars -->
+  <g filter="url(#softShadow)">
+    <rect x="90" y="170" width="300" height="300" rx="68" fill="url(#bgA)"/>
+  </g>
+  <rect x="90" y="170" width="300" height="300" rx="68" fill="none" stroke="#1E3A5F" stroke-opacity="0.9" stroke-width="3"/>
+  <!-- box outline -->
+  <path d="M176 236h128a26 26 0 0 1 26 26v112a26 26 0 0 1-26 26H176a26 26 0 0 1-26-26V262a26 26 0 0 1 26-26Z" fill="none" stroke="#E6F7F3" stroke-width="18"/>
+  <!-- lid notch -->
+  <path d="M150 278h180" stroke="#E6F7F3" stroke-width="14" stroke-linecap="round"/>
+  <!-- bars -->
+  <rect x="190" y="338" width="34" height="42" rx="9" fill="url(#barA)"/>
+  <rect x="239" y="310" width="34" height="70" rx="9" fill="url(#barA)"/>
+  <rect x="288" y="278" width="34" height="102" rx="9" fill="url(#barA)"/>
+  <!-- dot -->
+  <circle cx="305" cy="250" r="12" fill="#FFFFFF"/>
+
+  <!-- B: box + growth arrow -->
+  <g filter="url(#softShadow)">
+    <rect x="520" y="170" width="300" height="300" rx="68" fill="url(#bgB)"/>
+  </g>
+  <rect x="520" y="170" width="300" height="300" rx="68" fill="none" stroke="#1E3A5F" stroke-opacity="0.9" stroke-width="3"/>
+  <path d="M606 246h128a26 26 0 0 1 26 26v94a26 26 0 0 1-26 26H606a26 26 0 0 1-26-26v-94a26 26 0 0 1 26-26Z" fill="none" stroke="#E6F7F3" stroke-width="16"/>
+  <path d="M590 288h180" stroke="#E6F7F3" stroke-width="13" stroke-linecap="round"/>
+  <path d="M626 356l52-52 44 30 52-64" fill="none" stroke="url(#arrowB)" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M756 274l22-11-2 25" fill="none" stroke="#2DD4BF" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- small size tests for A -->
+  <text x="950" y="200" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="18" font-weight="600" fill="#16202A">16 / 32 / 48 px 小尺寸</text>
+  <g>
+    <rect x="950" y="230" width="48" height="48" rx="11" fill="url(#bgA)"/>
+    <path d="M962 243h24a5 5 0 0 1 5 5v18a5 5 0 0 1-5 5h-24a5 5 0 0 1-5-5v-18a5 5 0 0 1 5-5Z" fill="none" stroke="#E6F7F3" stroke-width="3.5"/>
+    <rect x="965" y="258" width="5" height="6" rx="1.5" fill="#2DD4BF"/>
+    <rect x="973" y="253" width="5" height="11" rx="1.5" fill="#2DD4BF"/>
+    <rect x="981" y="248" width="5" height="16" rx="1.5" fill="#2DD4BF"/>
+    <rect x="1020" y="238" width="32" height="32" rx="8" fill="url(#bgA)"/>
+    <path d="M1028 246h16a3.5 3.5 0 0 1 3.5 3.5v12a3.5 3.5 0 0 1-3.5 3.5h-16a3.5 3.5 0 0 1-3.5-3.5v-12a3.5 3.5 0 0 1 3.5-3.5Z" fill="none" stroke="#E6F7F3" stroke-width="2.5"/>
+    <rect x="1030" y="257" width="3.5" height="4" rx="1" fill="#2DD4BF"/>
+    <rect x="1036" y="254" width="3.5" height="7" rx="1" fill="#2DD4BF"/>
+    <rect x="1042" y="251" width="3.5" height="10" rx="1" fill="#2DD4BF"/>
+    <rect x="1072" y="244" width="24" height="24" rx="6" fill="url(#bgA)"/>
+    <path d="M1078 250h12a2.5 2.5 0 0 1 2.5 2.5v9a2.5 2.5 0 0 1-2.5 2.5h-12a2.5 2.5 0 0 1-2.5-2.5v-9a2.5 2.5 0 0 1 2.5-2.5Z" fill="none" stroke="#E6F7F3" stroke-width="2"/>
+    <rect x="1080" y="257" width="2.5" height="3" rx=".8" fill="#2DD4BF"/>
+    <rect x="1084.5" y="255" width="2.5" height="5" rx=".8" fill="#2DD4BF"/>
+    <rect x="1089" y="253" width="2.5" height="7" rx=".8" fill="#2DD4BF"/>
+  </g>
+
+  <!-- captions -->
+  <text x="90" y="520" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="24" font-weight="650" fill="#16202A">A · 货箱 + 上升柱（推荐）</text>
+  <text x="90" y="552" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="16" fill="#667085">库存是“箱”，上升柱是“销量/周转”；小尺寸最稳。</text>
+  <text x="520" y="520" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="24" font-weight="650" fill="#16202A">B · 货箱 + 增长箭头</text>
+  <text x="520" y="552" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="16" fill="#667085">更强调“调整节奏、向上增长”；16px 时箭头要简化。</text>
+
+  <!-- palette strip -->
+  <text x="80" y="650" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="18" font-weight="600" fill="#16202A">图标色板</text>
+  <g font-family="SF Mono, Menlo, monospace" font-size="13" fill="#667085">
+    <rect x="80" y="675" width="120" height="56" rx="10" fill="#0B1F3A"/><text x="92" y="752" fill="#475569">#0B1F3A</text>
+    <rect x="216" y="675" width="120" height="56" rx="10" fill="#1F4E79"/><text x="228" y="752" fill="#475569">#1F4E79</text>
+    <rect x="352" y="675" width="120" height="56" rx="10" fill="#0F766E"/><text x="364" y="752" fill="#475569">#0F766E</text>
+    <rect x="488" y="675" width="120" height="56" rx="10" fill="#2DD4BF"/><text x="500" y="752" fill="#475569">#2DD4BF</text>
+    <rect x="624" y="675" width="120" height="56" rx="10" fill="#E6F7F3"/><text x="636" y="752" fill="#475569">#E6F7F3</text>
+    <rect x="760" y="675" width="120" height="56" rx="10" fill="#F7F9FC" stroke="#DDE3EA"/><text x="772" y="752" fill="#475569">#F7F9FC</text>
+  </g>
+  <text x="920" y="700" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="14" fill="#667085">底色 60–70% · 主体 25–35% · 高光 5–10%</text>
+  <text x="920" y="726" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="14" fill="#667085">不要文字、不要 Excel 网格、不要购物车、不要超过 3 个色相。</text>
+</svg>

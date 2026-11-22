@@ -276,6 +276,12 @@ class ExportService:
         for source in result.get("sources") or []:
             self._append(sources, ["工作表", None, source.get("label") or source.get("role"), source.get("sheet"),
                                    source.get("records"), source.get("startDate"), source.get("endDate"), None])
+        manifest = result.get("importManifest") or {}
+        for source in manifest.get("selectionManifest") or []:
+            self._append(sources, ["原始输入", None, source.get("role"),
+                str(source.get("filename", "")) + " / " + str(source.get("sheet", "")),
+                source.get("recordCount", source.get("records")), None, None,
+                "忽略：未计入分析" if source.get("role") == "ignore" else "已确认纳入；" + self._cell_value(self._clean_config(source))])
         for item in result["products"]:
             for key, source in (item.get("sources") or {}).items():
                 if not self.SENSITIVE_KEY.search(str(key)):

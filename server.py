@@ -29,7 +29,7 @@ WEB_DIR = APP_DIR / "web"
 DATA_DIR = PROJECT_DIR / "本地数据"
 ORIGINAL_DIR = PROJECT_DIR / "examples"
 SAMPLE = ORIGINAL_DIR / "样例.xlsx"
-VERSION = "0.1.2"
+VERSION = "0.1.3"
 MAX_UPLOAD = 30 * 1024 * 1024
 MAX_BODY = (MAX_UPLOAD * 4 // 3) + 1024 * 1024
 WORKBOOKS: dict[str, dict] = {}
@@ -41,6 +41,15 @@ EXPORT_LOCK = threading.RLock()
 IO_LOCK = threading.RLock()
 EXPORT_PREVIEWS = {}
 MIGRATION_SERVICES = {}
+DATASET_SERVICES = {}
+
+
+def dataset_service():
+    from backend.dataset_service import DataSetService
+    directory = DATA_DIR.expanduser().resolve()
+    if directory not in DATASET_SERVICES:
+        DATASET_SERVICES[directory] = DataSetService(directory, get_workbook)
+    return DATASET_SERVICES[directory]
 
 
 def migration_service():
@@ -73,7 +82,8 @@ def preview_export(body):
     if target.is_symlink():
         raise ValueError("目标不能是符号链接。")
     # Generated outputs cannot overwrite any known input or managed runtime file.
-    if target.is_relative_to(ORIGINAL_DIR.resolve()) or target.is_relative_to(DATA_DIR.resolve()) or target.is_relative_to(APP_DIR.resolve()):
+    protected_app = target.is_relative_to(APP_DIR.resolve()) and not target.is_relative_to((PROJECT_DIR / "生成文件").resolve())
+    if target.is_relative_to(ORIGINAL_DIR.resolve()) or target.is_relative_to(DATA_DIR.resolve()) or protected_app:
         raise ValueError("请选择独立的生成文件目录，避免覆盖原始资料或应用数据。")
     for entry in WORKBOOKS.values():
         if target == entry["path"]:
@@ -124,6 +134,12 @@ def history_detail(identifier, deleted=False):
         return response
     path = Path(source["path"]).expanduser()
     try:
+        manifest = result.get("importManifest") or {}
+        for original in manifest.get("inputFiles") or []:
+            original_path = Path(original["path"])
+            if not original_path.is_file() or hashlib.sha256(original_path.read_bytes()).hexdigest() != original["sha256"]:
+                response["sourceMessage"] = "组合输入中的原文件已移动或变化；历史结果仍保留，重新导入并确认范围后可继续分析。"
+                return response
         if not path.is_file():
             response["sourceMessage"] = "原始文件已移动或删除；历史结果仍保留，当前快照只读。"
             return response
@@ -134,6 +150,10 @@ def history_detail(identifier, deleted=False):
         if inspection["sha256"] != source["sha256"]:
             response["sourceMessage"] = "原始文件读取期间发生变化，历史快照保持只读，请重新导入。"
             return response
+        if manifest:
+            inspection["config"] = result.get("config") or inspection["config"]
+            WORKBOOKS[inspection["workbookId"]]["dataset"] = {**manifest, "config": inspection["config"]}
+            inspection["dataset"] = manifest
         response.update({"inspection": inspection, "sourceAvailable": True,
                          "sourceMessage": "原始文件可用；当前展示保存时的结果，重新分析会生成一条新记录。"})
     except (ValueError, OSError) as exc:
@@ -188,6 +208,10 @@ def get_workbook(workbook_id):
         raise ValueError("文件会话已失效，请重新选择 Excel。")
     if not entry["path"].is_file():
         raise ValueError("原文件已移动或删除，请重新选择。")
+    for original in entry.get("dataset", {}).get("inputFiles", []):
+        path = Path(original["path"])
+        if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != original["sha256"]:
+            raise ValueError("组合输入中的原文件已变化或移动，请重新导入并确认范围。")
     stat = entry["path"].stat()
     if stat.st_size != entry["size"] or stat.st_mtime_ns != entry["mtime"]:
         if hashlib.sha256(entry["path"].read_bytes()).hexdigest() != entry["sha256"]:
@@ -256,7 +280,9 @@ class Handler(BaseHTTPRequestHandler):
                                        "sampleAvailable": SAMPLE.is_file(),
                                        "defaultDirectory": str(ORIGINAL_DIR),
                                        "defaultExportDirectory": str(PROJECT_DIR / "生成文件"),
-                                       "capabilities": ["excel", "directory", "manual", "mapping", "history", "local_export", "migration"]})
+                                       "capabilities": ["excel", "directory", "manual", "mapping", "history", "local_export", "migration", "multi_import", "format_review"]})
+            if parsed.path == "/api/import/templates":
+                return self.send_json({"templates": dataset_service().templates()})
             if self.dispatch_daily("GET", parsed):
                 return
             if parsed.path == "/api/sample":
@@ -343,6 +369,31 @@ class Handler(BaseHTTPRequestHandler):
                 raise ValueError("请求内容必须为对象。")
             parsed = urlparse(self.path)
             route = parsed.path
+            if route == "/api/import/stage":
+                return self.send_json(dataset_service().stage(body.get("workbookIds"), baselineId=body.get("templateId")))
+            if route == "/api/import/preview":
+                return self.send_json(dataset_service().preview(body.get("sessionId"), body.get("selections"), body.get("config")))
+            if route == "/api/import/confirm":
+                if body.get("confirmed") is not True:
+                    raise ValueError("请先预览并确认纳入的数据范围。")
+                template_name = str(body.get("templateName") or "").strip()
+                if len(template_name) > 80:
+                    raise ValueError("格式配置名称不能超过80个字符。")
+                if template_name and any(item["name"] == template_name for item in dataset_service().templates()):
+                    raise ValueError("已有同名格式模板，请换一个名称保存本次基线。")
+                token = body.get("token", "")
+                dataset = dataset_service().materialize(token)
+                filenames = [item["filename"] for item in dataset["inputFiles"]]
+                inspection = register_workbook(Path(dataset["path"]), "、".join(filenames))
+                inspection["config"] = dataset["config"]
+                inspection["dataset"] = {"inputFiles": filenames, "selectionManifest": dataset["selectionManifest"], "formatChanges": dataset["formatChanges"]}
+                entry = WORKBOOKS[inspection["workbookId"]]
+                entry["dataset"] = dataset
+                entry["templateToken"] = token
+                entry["templateName"] = template_name
+                export_service().log_operation("import_review", {"files": len(dataset["inputFiles"]),
+                    "sheets": len(dataset["selectionManifest"]), "formatChanges": len(dataset["formatChanges"]), "result": "success"})
+                return self.send_json({"inspection": inspection})
             if self.dispatch_daily("POST", parsed, body):
                 return
             if route == "/api/export/preview":
@@ -381,6 +432,7 @@ class Handler(BaseHTTPRequestHandler):
                 result = migration_service().import_bundle(body.get("path"), replace=body.get("replace") is True,
                     confirmation_token=body.get("token"))
                 HISTORY_STORES.clear()
+                DATASET_SERVICES.clear()
                 return self.send_json(result)
             restore_match = re.fullmatch(r"/api/history/([0-9]{1,64})/restore", route)
             if restore_match:
@@ -430,6 +482,8 @@ class Handler(BaseHTTPRequestHandler):
                 config = body.get("config", {})
                 if not isinstance(config, dict):
                     raise ValueError("分析配置格式无效。")
+                if entry.get("dataset") and config.get("mappings", {}) != entry["dataset"].get("config", {}).get("mappings", {}):
+                    raise ValueError("组合输入的工作表和字段已按预览范围确认；请通过合并导入重新选择范围和映射。")
                 result = engine().analyze_workbook(entry["path"], config)
                 if not result.get("products"):
                     raise ValueError("没有识别到商品数据。请在页面配置所选文件的工作表、表头行和商品列，再重新分析。")
@@ -440,6 +494,26 @@ class Handler(BaseHTTPRequestHandler):
                 result["appVersion"] = VERSION
                 result["sourceInfo"] = {"path": str(entry["path"]), "sha256": entry["sha256"],
                                         "filename": entry["filename"]}
+                if entry.get("dataset"):
+                    dataset = entry["dataset"]
+                    result["importManifest"] = {key: dataset.get(key) for key in ("inputFiles", "selectionManifest", "formatChanges", "provenance", "issues", "warehouseLabelsByProduct")}
+                    for warning in dataset.get("issues") or []:
+                        result["issues"].append({"id": "import-" + str(len(result["issues"]) + 1),
+                            "severity": warning.get("severity", "warning"), "code": warning.get("code", "IMPORT_REVIEW"),
+                            "title": warning.get("title", "导入范围提示"), "detail": warning.get("detail", ""),
+                            "sheet": warning.get("sheet", ""), "cell": warning.get("cell", ""), "product": warning.get("product", "")})
+                    labels = dataset.get("warehouseLabelsByProduct") or {}
+                    for product in result["products"]:
+                        warehouses = labels.get(product["id"], [])
+                        if warehouses:
+                            product["warehouse"] = "、".join(warehouses)
+                        product["issues"] = [issue for issue in result["issues"] if issue.get("product") == product["id"]]
+                        own = product["issues"]
+                        product["status"] = "error" if any(i["severity"] == "error" for i in own) else "warning" if any(i["severity"] == "warning" for i in own) else "normal"
+                    result["summary"]["issueCount"] = len(result["issues"])
+                    if entry.get("templateName"):
+                        result["importTemplate"] = dataset_service().accept(entry["templateToken"], entry["templateName"])
+                        entry["templateName"] = ""
                 saved = history_store().save(result)
                 export_service().log_operation("analyze", {"source": str(entry["path"]), "snapshotId": saved["id"], "result": "success"})
                 return self.send_json(saved)

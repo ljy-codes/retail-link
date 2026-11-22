@@ -195,7 +195,7 @@ class MigrationService:
                     relative = path.relative_to(self.data_dir).as_posix()
                     if self._HISTORY_RE.fullmatch(relative):
                         files[relative] = self._inside(relative)
-        for name in ("daily.sqlite3", "preferences.json"):
+        for name in ("daily.sqlite3", "preferences.json", "import_templates.json"):
             path = self._inside(name)
             if path.is_file():
                 files[name] = path
@@ -268,7 +268,7 @@ class MigrationService:
             original.close()
 
     def _validate_files(self, files):
-        counts = {"history": 0, "historyDeleted": 0, "dailyRecords": 0, "dailyRevisions": 0, "preferences": 0, "logFiles": 0}
+        counts = {"history": 0, "historyDeleted": 0, "dailyRecords": 0, "dailyRevisions": 0, "preferences": 0, "importTemplates": 0, "logFiles": 0}
         ids = set()
         for name, path in files.items():
             match = self._HISTORY_RE.fullmatch(name)
@@ -285,6 +285,21 @@ class MigrationService:
             elif name == "preferences.json":
                 self.validate_preferences(self._read_json(path))
                 counts["preferences"] = 1
+            elif name == "import_templates.json":
+                value = self._read_json(path)
+                if not isinstance(value, dict) or value.get("version") != 1 or not isinstance(value.get("templates"), list):
+                    raise MigrationError("导入格式模板结构无效。")
+                template_ids = set()
+                for template in value["templates"]:
+                    if (not isinstance(template, dict) or not isinstance(template.get("id"), str)
+                            or not re.fullmatch(r"[a-f0-9]{32}", template["id"])
+                            or template["id"] in template_ids or not isinstance(template.get("name"), str)
+                            or not 1 <= len(template["name"]) <= 80
+                            or not isinstance(template.get("structures"), dict)
+                            or not isinstance(template.get("selections"), dict)):
+                        raise MigrationError("导入格式模板内容无效。")
+                    template_ids.add(template["id"])
+                counts["importTemplates"] = len(template_ids)
             elif self._LOG_RE.fullmatch(name):
                 with path.open(encoding="utf-8") as stream:
                     for line in stream:
@@ -366,7 +381,7 @@ class MigrationService:
                     posix = PurePosixPath(item.filename)
                     if item.is_dir() or posix.is_absolute() or ".." in posix.parts or "\\" in item.filename or posix.as_posix() != item.filename or stat.S_ISLNK(item.external_attr >> 16) or item.flag_bits & 1:
                         raise MigrationError("迁移包包含不安全路径或不支持的文件。")
-                    if item.filename != "manifest.json" and not (self._HISTORY_RE.fullmatch(item.filename) or self._LOG_RE.fullmatch(item.filename) or item.filename in ("daily.sqlite3", "preferences.json")):
+                    if item.filename != "manifest.json" and not (self._HISTORY_RE.fullmatch(item.filename) or self._LOG_RE.fullmatch(item.filename) or item.filename in ("daily.sqlite3", "preferences.json", "import_templates.json")):
                         raise MigrationError("迁移包包含不允许的文件。")
                 if archive.getinfo("manifest.json").file_size > 8 * 1024 * 1024:
                     raise MigrationError("迁移包清单过大。")

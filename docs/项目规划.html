@@ -31,8 +31,8 @@
       </div>
       <aside class="status-card" aria-label="版本状态">
         <div class="label">当前版本状态</div>
-        <div class="status"><span class="dot" aria-hidden="true"></span><span id="release-status">v0.1.2 本地文件与数据迁移原型</span></div>
-        <div class="date">规划更新：2026-11-21 · Asia/Shanghai</div>
+        <div class="status"><span class="dot" aria-hidden="true"></span><span id="release-status">v0.1.3 组合输入与格式确认原型</span></div>
+        <div class="date">规划更新：2026-11-22 · Asia/Shanghai</div>
       </aside>
     </div>
   </div>
@@ -51,6 +51,7 @@
       <a href="#appearance"><span class="num">＋</span> 外观与阅读</a>
       <a href="#product-requirements"><span class="num">＋</span> 产品运行要求</a>
       <a href="#local-files"><span class="num">＋</span> 本地文件与迁移</a>
+      <a href="#combined-import"><span class="num">＋</span> 组合输入与格式确认</a>
       <a href="#roadmap"><span class="num">05</span> 阶段路线</a>
       <a href="#connectivity"><span class="num">＋</span> 离线与线上</a>
       <a href="#data-quality"><span class="num">＋</span> 问题数据查看</a>
@@ -83,16 +84,16 @@
       </section>
 
       <section class="section" id="scope">
-        <div class="section-head"><div><div class="section-kicker">02 · 当前版本</div><h2>v0.1.2：看盘结果可保存和迁移</h2></div><span class="pill">已实现 · 已验证</span></div>
+        <div class="section-head"><div><div class="section-kicker">02 · 当前版本</div><h2>v0.1.3：多文件核对后生成看盘</h2></div><span class="pill">已实现 · 已验证</span></div>
         <p>用户明确先做 <strong>库存与销量计算、每日经营表</strong>。本版围绕这两个结果构建文件导入、映射配置、异常提示和手工修正。</p>
         <div class="table-wrap"><table><thead><tr><th style="width:20%">能力</th><th>当前具体范围</th><th style="width:15%">状态</th></tr></thead><tbody>
-          <tr><td>文件入口</td><td>选择或拖入 <code>.xlsx</code>、<code>.xlsm</code>；提供现有样例入口；输入本机目录路径，扫描后选择一个文件分析。</td><td><span class="pill">已实现</span></td></tr>
+          <tr><td>文件入口</td><td>选择或拖入 <code>.xlsx</code>、<code>.xlsm</code>；提供现有样例入口；输入本机目录路径，扫描后勾选1—8份文件，逐表确认角色或忽略，预览后分析。</td><td><span class="pill">已实现</span></td></tr>
           <tr><td>自动识别与配置</td><td>识别常见工作表和表头；可修改数据角色、工作表、表头行与列映射；支持横向日期表和按日期逐行记录的长表。</td><td><span class="pill">已实现</span></td></tr>
           <tr><td>经营看盘</td><td>月计划与报单达成、距目标差额、出库与供价金额、折扣比例／折价幅度、货损金额与货损率。</td><td><span class="pill">已实现</span></td></tr>
           <tr><td>库存与销量</td><td>现货与在途分开展示；按统计期间筛选销量，计算完整观察窗口的日均销量；库存池确认后计算现货可售天数。</td><td><span class="pill">已实现</span></td></tr>
           <tr><td>核对与人工补正</td><td>显示日期、编码、源金额与明细差异；可预览原表、查看单元格来源；支持修正商品计划、现货数量／金额、供价和货损金额，并可还原。</td><td><span class="pill">已实现</span></td></tr>
           <tr><td>结果与配置保存</td><td>可复用口径和字段配置保存在当前浏览器；分析结果与当次配置保存在本地记录；预览后将五工作表 Excel 保存到指定现有目录，保留 CSV 下载，并支持应用数据迁移。</td><td><span class="pill">已实现</span></td></tr>
-          <tr><td>完整使用验证</td><td>65项自测通过；已在浏览器验证导入、人工映射、配置、手修、原表定位、历史删除恢复、CSV导出与每日记录，并启动交付版本。</td><td><span class="pill">已验证</span></td></tr>
+          <tr><td>完整使用验证</td><td>已验证文件、历史、日记录、本地Excel与迁移；本轮追加组合输入、库存快照冲突、模板变更、范围追溯及HTTP闭环验证。具体数量与证据见task.md。</td><td><span class="pill">已验证</span></td></tr>
         </tbody></table></div>
         <div class="callout">当前的“目录读取”是扫描并手动选择文件。目录定时监听、无人值守刷新与 URL 读取属于后续阶段。</div>
       </section>
@@ -141,7 +142,7 @@
       </section>
 
       <section class="section" id="flexible-input">
-        <div class="section-head"><div><div class="section-kicker">输入适配 · 用户新增目标</div><h2>文件格式会变化，人工调配后可以继续复用</h2></div><span class="pill pending">本轮完善中</span></div>
+        <div class="section-head"><div><div class="section-kicker">输入适配 · 用户新增目标</div><h2>文件格式会变化，人工调配后可以继续复用</h2></div><span class="pill">已实现 · 持续适配</span></div>
         <p class="intro">同类库存、销售或经营文件的表名、表头行、列顺序和布局可能改变。工具先自动识别；识别不足时，用户直接在页面调整对应关系并保存为配置，下次遇到相同格式可以复用。</p>
         <div class="table-wrap"><table><thead><tr><th>步骤</th><th>具体实现与约束</th></tr></thead><tbody>
           <tr><td>自动判断</td><td>检查工作表、候选表头与业务字段，识别横向日期表或逐行日期表。未识别角色、缺少日期或商品列时明确提示，不强行生成完整结果。</td></tr>
@@ -233,12 +234,23 @@
         <p>验证：新增导出18项、迁移14项、HTTP闭环6项全部通过；已有HTTP15项回归通过。浏览器已走通保存、同名覆盖、恢复、下载、打包和确认导入。源文件哈希保持不变。</p>
       </section>
 
+      <section class="section" id="combined-import">
+        <div class="section-head"><div><div class="section-kicker">v0.1.3 · 本轮实现</div><h2>多文件接入，格式变更由用户决定</h2></div><span class="pill">已实现 · 已验证</span></div>
+        <div class="table-wrap"><table><thead><tr><th>能力</th><th>实现与边界</th></tr></thead><tbody>
+          <tr><td>逐表范围确认</td><td>最多8份文件／80MB，单文件30MB，合计64张表／50万有效单元格。每张表指定用途或忽略，预览纳入与未使用清单，确认后生成分析副本。取消保留原看盘。</td></tr>
+          <tr><td>单位与重复保护</td><td>数量和单价同步换算，缺箱规阻塞；库存需仓库和业务日期，同仓重叠与跨日库存、重复月计划、不唯一编码需先处理；疑似重复明细提示用户核对，不擅自去重。</td></tr>
+          <tr><td>格式基线</td><td>结构指纹比较表头、列序和合并区域；数值变化不触发结构警报。变更可人工重映射后继续，也可取消换文件。成功分析后明确另存基线，不自动覆盖同名模板；基线纳入迁移包。</td></tr>
+          <tr><td>来源与历史</td><td>保存所有原文件哈希、纳入／忽略工作表和原始行追溯。Excel数据来源保留范围清单；原件变化后历史仍可查看与导出，重算需重新导入确认。</td></tr>
+          <tr><td>后续适配</td><td>统一商品标识仍由输入提供，未完成自动平台编码对照。复杂双层价量横表、真实业务并行对账、目录自动监听及线上连接继续后续，不计作当前已交付能力。</td></tr>
+        </tbody></table></div>
+      </section>
+
       <section class="section" id="roadmap">
         <div class="section-head"><div><div class="section-kicker">05 · 阶段路线</div><h2>先把一次分析做可靠，再逐步减少人工操作</h2></div></div>
         <p>各阶段以完成验收为推进依据。以下是实现路线，不承诺固定日期，也不将未来能力算入当前交付。</p>
         <div class="roadmap">
-          <details class="phase" open><summary><span class="phase-no">v0.1</span><span class="phase-title">单文件看盘原型</span><span class="pill">当前 · 原型已交付</span></summary><div class="phase-body"><p>完成选择／拖入 Excel、目录扫描选取、映射与规则配置、看盘、异常定位、手工修正和结果导出。使用现有样例验证计算，再验证真实浏览器操作及最新版本启动。</p><div class="scope"><span>本地运行</span><span>读入一份工作簿</span><span>用户主动触发分析</span></div></div></details>
-          <details class="phase" open><summary><span class="phase-no">v0.2</span><span class="phase-title">固定真实业务口径，适配日常原始表</span><span class="pill future">后续</span></summary><div class="phase-body"><p>补齐仓库登记与平台原始导出样本，确认计划考核、库存池、折价和金额调整口径。建立稳定商品编码对照和输入配置，验证多日数据、跨月、重复导入与人工结果一致性。在本轮完整历史快照的基础上，按真实需要设计多文件合并、历史对比和输入版本管理，避免反复人工整理中间表。</p><div class="scope"><span>原始数据适配</span><span>稳定业务规则</span><span>历史与重复处理</span></div></div></details>
+          <details class="phase" open><summary><span class="phase-no">v0.1</span><span class="phase-title">本地看盘与组合输入原型</span><span class="pill">当前 · 原型已交付</span></summary><div class="phase-body"><p>完成选择／拖入 Excel、目录扫描选取、映射与规则配置、看盘、异常定位、手工修正和结果导出。使用现有样例验证计算，再验证真实浏览器操作及最新版本启动。</p><div class="scope"><span>本地运行</span><span>多文件与逐表确认</span><span>用户主动触发分析</span></div></div></details>
+          <details class="phase" open><summary><span class="phase-no">v0.2</span><span class="phase-title">固定真实业务口径，适配日常原始表</span><span class="pill future">后续</span></summary><div class="phase-body"><p>补齐仓库登记与平台原始导出样本，确认计划考核、库存池、折价和金额调整口径。建立稳定商品编码对照和输入配置，验证多日数据、跨月、重复导入与人工结果一致性。在本轮完整历史快照的基础上，继续完善已实现的多文件合并，推进历史对比和输入版本管理，避免反复人工整理中间表。</p><div class="scope"><span>原始数据适配</span><span>稳定业务规则</span><span>历史与重复处理</span></div></div></details>
           <details class="phase"><summary><span class="phase-no">v0.3</span><span class="phase-title">受控的文件自动化</span><span class="pill future">后续</span></summary><div class="phase-body"><p>在固定输入规则后，增加可配置目录监听／定时扫描、变更检测、自动重算及失败提示。明确文件未写完、重复文件、缺失文件、异常数据的处理方法；保留暂停、手动重跑和结果追溯。只有无人值守验证通过后，才称为自动读取。</p><div class="scope"><span>目录监听</span><span>调度与重试</span><span>人工接管</span></div></div></details>
           <details class="phase"><summary><span class="phase-no">v0.4</span><span class="phase-title">URL 与其他数据来源接入</span><span class="pill future">后续评估</span></summary><div class="phase-body"><p>按实际数据源评估 URL 读取与正式接口。逐项明确访问方式、认证、更新频率、字段映射和失败恢复；沿用现有标准数据与分析接口。URL 接入不自动等同于平台登录、全站采集或后台自动操作。</p><div class="scope"><span>数据连接配置</span><span>来源适配</span><span>访问与失败恢复</span></div></div></details>
           <details class="phase"><summary><span class="phase-no">v1.x</span><span class="phase-title">形成多个独立工具共享数据的操控台</span><span class="pill future">长期方向</span></summary><div class="phase-body"><p>根据使用频率和实际收益，扩展到货、价格、活动、采购交接等已验证场景。共享商品、库存、销量和基础配置，保持各工具可以独立使用。自定义公式、到货核销、利润核算等，须先补齐规则与验证再单独立项。</p><div class="scope"><span>按场景扩展</span><span>共享基础数据</span><span>保留手工路径</span></div></div></details>

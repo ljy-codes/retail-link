@@ -1,7 +1,7 @@
 {
   "name": "零售通",
-  "version": "0.1.7",
-  "featureLevel": "desktop-2",
-  "pairedWindowsVersion": "0.1.8",
+  "version": "0.1.9",
+  "featureLevel": "desktop-3",
+  "pairedWindowsVersion": "0.1.10",
   "releaseDate": "2026-11-23"
 }

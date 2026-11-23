@@ -41,7 +41,7 @@ def platform_name():
 
 def application_metadata():
     """The packaged app supplies its own platform release metadata."""
-    metadata = {"version": "0.1.7", "platform": platform_name(), "featureLevel": "desktop-2"}
+    metadata = {"version": "0.1.9", "platform": platform_name(), "featureLevel": "desktop-3"}
     source = APP_DIR / "版本.json"
     if source.is_file():
         saved = json.loads(source.read_text(encoding="utf-8"))
@@ -100,7 +100,8 @@ def resource_directory():
     return APP_DIR.resolve()
 
 
-def validate_export_target(path):
+def validate_export_target(path, snapshot=None):
+    from backend.export_service import ExportService
     if not path:
         raise ValueError("请指定生成文件的完整路径。")
     target = Path(path).expanduser()
@@ -114,8 +115,9 @@ def validate_export_target(path):
         protected_app = False
     if target.is_relative_to(ORIGINAL_DIR.resolve()) or target.is_relative_to(DATA_DIR.resolve()) or protected_app:
         raise ValueError("请选择独立的生成文件目录，避免覆盖原始资料或应用数据。")
-    if any(target == entry["path"] for entry in WORKBOOKS.values()):
-        raise ValueError("不能覆盖已导入的源工作簿。")
+    with WORKBOOK_LOCK:
+        sources = list(WORKBOOKS.values())
+    ExportService.validate_source_target(target, snapshot, *sources)
     return target
 
 
@@ -216,15 +218,15 @@ def preview_export(body):
         raise ValueError("目标目录不存在，请选择一个现有目录。")
     target = directory / ExportService._safe_filename(body.get("filename"))
     # Generated outputs cannot overwrite any known input or managed runtime file.
-    target = validate_export_target(target)
-    before = hashlib.sha256(target.read_bytes()).hexdigest() if target.is_file() else None
+    target = validate_export_target(target, snapshot)
+    target_state = ExportService.target_state(target)
     token = secrets.token_urlsafe(24)
     now = time.monotonic()
     for key, value in list(EXPORT_PREVIEWS.items()):
         if now - value["created"] > 600:
             EXPORT_PREVIEWS.pop(key, None)
-    EXPORT_PREVIEWS[token] = {"created": now, "result": snapshot, "target": target, "before": before}
-    return {"token": token, "path": str(target), "exists": before is not None,
+    EXPORT_PREVIEWS[token] = {"created": now, "result": snapshot, "target": target, "targetState": target_state}
+    return {"token": token, "path": str(target), "exists": target_state["identity"] is not None,
             "productCount": len(snapshot["products"]), "scope": snapshot["exportScope"],
             "sheets": list(ExportService.SHEETS), "snapshotId": snapshot["id"]}
 
@@ -529,19 +531,21 @@ class Handler(BaseHTTPRequestHandler):
             if route == "/api/export/preview":
                 return self.send_json(preview_export(body))
             if route == "/api/export/xlsx":
-                from backend.export_service import AlreadyExistsError
+                from backend.export_service import AlreadyExistsError, ExportService
                 token = body.get("token", "")
                 pending = EXPORT_PREVIEWS.get(token)
                 if not pending or time.monotonic() - pending["created"] > 600:
                     raise ValueError("导出预览已失效，请重新预览后确认。")
-                target = pending["target"]
-                before = hashlib.sha256(target.read_bytes()).hexdigest() if target.is_file() else None
-                if before != pending["before"] or target.is_symlink():
+                target = validate_export_target(pending["target"], pending["result"])
+                current_state = ExportService.target_state(target)
+                if current_state != pending["targetState"]:
                     raise ValueError("目标文件在预览后发生变化，请重新预览。")
-                if before is not None and body.get("overwrite") is not True:
+                exists = current_state["identity"] is not None
+                if exists and body.get("overwrite") is not True:
                     return self.send_json({"error": "存在同名文件，请另存或明确确认覆盖。", "code": "ALREADY_EXISTS"}, 409)
                 try:
-                    result = export_service().create_xlsx(pending["result"], target.parent, target.name, overwrite=before is not None)
+                    result = export_service().create_xlsx(pending["result"], target.parent, target.name,
+                        overwrite=exists, expected_target=pending["targetState"])
                 except AlreadyExistsError as exc:
                     return self.send_json({"error": str(exc), "code": "ALREADY_EXISTS"}, 409)
                 EXPORT_PREVIEWS.pop(token, None)

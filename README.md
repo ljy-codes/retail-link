@@ -1,4 +1,4 @@
-> 当前分支：**windows**。Windows 0.1.8，desktop-2。等待Windows环境系统适配、实机验证及打包，当前无Windows安装包。 [平台记录](docs/平台发布记录.md)。
+> 当前分支：**windows**。Windows 0.1.10配对计划，desktop-3。等待Windows环境适配、实机验证及打包，当前无Windows安装包。[平台记录](docs/平台发布记录.md)。
 
 # 零售通 Retail Link
 
@@ -6,17 +6,19 @@
 
 ## 当前版本
 
-Mac v0.1.7（Intel / macOS13+），功能基线 desktop-2。采用原生AppKit/WKWebView和内置Python，无需客户安装Python或Codex。当前为本机试用包；Developer ID公证和Apple Silicon原生包待对应验证。
+Mac v0.1.9（Intel / macOS13+），功能基线 desktop-3。新增双层日期价量表、持久商品关联、导入差异核对及筛选日记录Excel/CSV导出，并修复组合历史原件保护。采用原生AppKit/WKWebView和内置Python，无需客户安装Python或Codex。当前为本机试用包；Developer ID公证和Apple Silicon原生包待对应验证。
 
-Mac采用奇数补丁号，Windows采用紧随的偶数。本轮Windows配对v0.1.8；Windows需在Windows系统实现、打包和验收，当前没有Windows安装包。本机由Mac带头做功能、全功能分析和覆盖测试，Windows复用同一业务代码和功能清单，只替换平台交互层。
+Mac采用奇数补丁号，Windows采用紧随的偶数。本轮Windows配对计划v0.1.10；Windows需在Windows系统实现、打包和验收，当前没有Windows安装包。本机由Mac带头做功能、全功能分析和覆盖测试，Windows复用同一业务代码和功能清单，只替换平台交互层。
 
 ## 分支与源码版本
 
 长期分支为 [main](https://github.com/ljy-codes/retail-link/tree/main)、[macos](https://github.com/ljy-codes/retail-link/tree/macos)、[windows](https://github.com/ljy-codes/retail-link/tree/windows)。main维护共享业务代码、测试和概览；平台分支保留完整工程，负责系统适配、构建与发布记录。Mac带头实现与验证，Windows同步同一功能基线。
 
-当前Mac源码标签为 `v0.1.7-macos`，对应本轮构建与验收的共享提交。Windows0.1.8仍待实机适配与打包，无已发布Windows标签。完整规则见 [GitHub分支与版本规定](docs/GitHub分支与版本规定.md)。
+当前Mac源码标签为 `v0.1.9-macos`，锚定本轮已构建验收的共享功能提交；main、macos、windows同步同一业务基线。Windows0.1.10仍待实机适配与打包，无已发布Windows标签。完整规则见 [GitHub分支与版本规定](docs/GitHub分支与版本规定.md)。
 
 11月22日答疑5项已全部确认并归档：净销量、单品85%、货损双轨、可选源写回、先人工下载。本轮已完成单品目标与任务闭环，净销量重建、货损双轨及源写回仍待后续，详见 [阶段性总结顶部](docs/阶段性总结.md)。
+
+11月23日[当前答疑](docs/答疑文档/零售通-20261123.xlsx)仅3项；[版本分析与实施进度](docs/下一版本分析-20261123.md)以总规划v0.2为主线。已有原表适配与商品关联已在0.1.9本机交付，下一步推进发货/售后及净销量真实对账。细节分批补充，不等待全部答完。真实价量样表仅有结构、数值为空，本轮数值闭环用虚构样本验证。
 
 ## 使用与交付
 
@@ -30,6 +32,8 @@ Mac采用奇数补丁号，Windows采用紧随的偶数。本轮Windows配对v0.
 - 单品目标考核、逐款缺口合计、每日任务与未达标筛选；合计比例不替代逐款达标。
 - 计划、库存、销量、出库、在途、货损看盘；缺失与零值分开，日期／单位／重复／标识冲突校验。
 - 每日售价销量、历史快照与软删除恢复；JSON、SQLite、JSONL轻量存储。
+- 双层日期价量原表、合并仓位、持久商品关联、逐条旧新差异预览、重复幂等及日记录筛选Excel/CSV导出。
+- 组合历史恢复后保护全部输入原件及硬链接，预览、提交与实际发布前核对目标变化。
 - 五工作表Excel生成、原子保护、备份恢复、CSV下载、日志、应用数据迁移。
 - 浅色／深色／系统、两组配色、阅读字号与玻璃效果开关。
 - Mac独立窗口、原生文件对话框与下载、启动进度／重试、单实例、跨端口配置恢复。
@@ -44,7 +48,7 @@ Mac采用奇数补丁号，Windows采用紧随的偶数。本轮Windows配对v0.
 PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest discover -s tests -v
 ```
 
-本机最终以内置运行环境完成184项全功能测试、23项新界面行为和16项外观测试，全部通过。包括9项桌面后端、5项现成App独立性／只读资源／元数据和源码一致性验证。真实原生操作覆盖Excel选择、目录取消、历史、CSV Blob保存、重启设置恢复、正常退出与强退回收。DMG校验、只读挂载及逐文件一致性通过。源码仓库不含业务原表，部分本机验收案例仅本机运行；现成App测试在未构建时明确跳过。
+本机0.1.9最终221项Python回归、16项日记录界面、23项单品界面和16项外观测试全部通过；源码工作区运行161项，1项现成App验证因仓库不存构建产物而明确跳过。原生实际保存Excel重读、重启保留、正常退出回收、DMG只读挂载、签名及逐文件核对通过。源码仓库不含业务原表与构建二进制；真实样表价量为空，仅完成结构核对，数值流程以隔离虚构样本验证。
 
 用户业务真实对账继续推进，技术测试不替代业务验收。已知原生下载的exFAT/FAT移动盘兼容、Apple Silicon、Windows、正式公证和完整安装升级／卸载测试留待对应环境完成。
 

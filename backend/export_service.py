@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import stat
 import tempfile
 import threading
 import unicodedata
@@ -107,6 +108,57 @@ class ExportService:
             raise ExportError("目标不是普通文件，不能写入。")
         if path.with_name("~$" + path.name).exists() or path.with_name("~$" + path.name[2:]).exists():
             raise ExportError("文件可能正在 Excel 中使用，请关闭后再写入。")
+
+    @staticmethod
+    def source_paths(source):
+        """Include every reviewed input, including history-restored datasets."""
+        if not isinstance(source, dict):
+            return []
+        entries = [source, source.get("sourceInfo")]
+        for container in (source, source.get("importManifest"), source.get("dataset")):
+            if isinstance(container, dict):
+                inputs = container.get("inputFiles")
+                if isinstance(inputs, list):
+                    entries.extend(inputs)
+        return [Path(entry["path"]).expanduser() for entry in entries
+                if isinstance(entry, dict) and isinstance(entry.get("path"), (str, os.PathLike))
+                and str(entry["path"]).strip()]
+
+    @classmethod
+    def validate_source_target(cls, target, *sources):
+        target = Path(target).expanduser()
+        resolved = target.resolve()
+        for source in sources:
+            for path in cls.source_paths(source):
+                # Preserve the original path even when its file was moved or
+                # removed; existing aliases also need filesystem identity checks.
+                if path.resolve() == resolved:
+                    raise ExportError("不能把导出结果写到原始工作簿，请选择新文件名。")
+                try:
+                    same_file = os.path.samefile(path, target)
+                except FileNotFoundError:
+                    same_file = False
+                if same_file:
+                    raise ExportError("不能把导出结果写到原始工作簿，请选择新文件名。")
+
+    @staticmethod
+    def _file_identity(path):
+        try:
+            info = Path(path).lstat()
+        except FileNotFoundError:
+            return None
+        if not stat.S_ISREG(info.st_mode):
+            raise ExportError("目标不是普通文件，不能写入。")
+        return (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+
+    @classmethod
+    def target_state(cls, path):
+        cls._check_target(path)
+        identity = cls._file_identity(path)
+        digest = cls._sha256(path) if identity is not None else None
+        if cls._file_identity(path) != identity:
+            raise ExportError("读取期间目标文件已变化，请重新预览。")
+        return {"identity": identity, "sha256": digest}
 
     @staticmethod
     def _cell_value(value):
@@ -443,33 +495,38 @@ class ExportService:
         self._sync_directory(output.parent)
         return output, digest
 
-    def create_xlsx(self, result, target_dir, filename=None, overwrite=False):
+    def create_xlsx(self, result, target_dir, filename=None, overwrite=False, *, expected_target=None):
         operation_id = uuid.uuid4().hex
         output = temp = backup = None
         target_lock = None
         before = None
         published = False
+        published_state = None
         try:
             if not isinstance(result, dict) or not result.get("products") or not isinstance(result["products"], list):
                 raise ExportError("没有可导出的看盘结果。")
             if not all(isinstance(item, dict) for item in result["products"]):
                 raise ExportError("看盘结果格式无效，请重新生成。")
             directory = self._directory(target_dir)
+            directory_info = directory.stat()
+            directory_identity = (directory_info.st_dev, directory_info.st_ino)
             output = directory / self._safe_filename(filename)
-            source_path = (result.get("sourceInfo") or {}).get("path")
-            if source_path and (Path(source_path).expanduser().resolve() == output.resolve() or
-                                output.exists() and Path(source_path).is_file() and os.path.samefile(source_path, output)):
-                raise ExportError("不能把导出结果写到原始工作簿，请选择新文件名。")
+            self.validate_source_target(output, result)
             # Hold one lock level through the exception/recovery path as well.
             target_lock = _shared_lock(output)
             target_lock.acquire()
             with _shared_lock(output):
-                self._check_target(output)
-                exists = output.exists()
+                self.validate_source_target(output, result)
+                initial_state = self.target_state(output)
+                if expected_target is not None and initial_state != expected_target:
+                    raise ExportError("目标文件在预览后发生变化，请重新预览。")
+                exists = initial_state["identity"] is not None
                 if exists and not overwrite:
                     raise AlreadyExistsError("已有同名文件，请另存为，或明确确认备份后覆盖。")
                 if exists:
                     backup, before = self._backup(output, operation_id)
+                    if before != initial_state["sha256"]:
+                        raise ExportError("备份期间目标文件已变化，已停止覆盖，请重新确认。")
                 self.log_operation("export", {"operationId": operation_id, "snapshotId": str(result.get("id", "")),
                                    "target": str(output), "result": "started", "mode": "overwrite" if exists else "new"})
                 descriptor, name = tempfile.mkstemp(prefix=".retail-export-", suffix=".xlsx", dir=directory)
@@ -483,10 +540,16 @@ class ExportService:
                     wb.close()
                 self._sync_file(temp)
                 self._verify_workbook(temp, expected)
+                self._directory(directory)
+                current_directory = directory.stat()
+                if (current_directory.st_dev, current_directory.st_ino) != directory_identity:
+                    raise ExportError("生成期间目标目录已变化，请重新选择目录。")
                 digest = self._sha256(temp)
-                self._check_target(output)
+                published_identity = self._file_identity(temp)[:2]
+                self.validate_source_target(output, result)
+                current_state = self.target_state(output)
                 if exists:
-                    if not output.exists() or self._sha256(output) != before:
+                    if current_state != initial_state:
                         raise ExportError("生成期间目标文件已变化，已停止覆盖，请重新确认。")
                     os.replace(temp, output)
                 else:
@@ -497,8 +560,12 @@ class ExportService:
                     temp.unlink()
                 published = True
                 self._sync_directory(directory)
+                candidate_state = self.target_state(output)
+                if candidate_state["identity"] is None or candidate_state["identity"][:2] != published_identity or candidate_state["sha256"] != digest:
+                    raise ExportError("写入后目标文件发生变化，已保留当前文件和备份。")
+                published_state = candidate_state
                 self._verify_workbook(output, expected)
-                if self._sha256(output) != digest:
+                if self.target_state(output) != published_state:
                     raise ExportError("写入后文件发生变化，校验失败。")
                 info = {"operationId": operation_id, "path": str(output), "backupPath": str(backup) if backup else None,
                         "backupSha256": before, "sha256": digest, "bytes": output.stat().st_size,
@@ -513,6 +580,13 @@ class ExportService:
             if published and output is not None:
                 with _shared_lock(output):
                     try:
+                        self._directory(directory)
+                        current_directory = directory.stat()
+                        if (current_directory.st_dev, current_directory.st_ino) != directory_identity:
+                            raise ExportError("目标目录已被外部替换，保留当前文件及备份。")
+                        self.validate_source_target(output, result)
+                        if published_state is None or self.target_state(output) != published_state:
+                            raise ExportError("目标已被外部修改，保留当前文件及备份。")
                         if backup is not None and before is not None:
                             self._restore_backup(backup, output, before)
                         else:

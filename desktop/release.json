@@ -1,7 +1,7 @@
 {
-  "featureLevel": "desktop-2",
-  "macVersion": "0.1.7",
-  "windowsVersion": "0.1.8",
+  "featureLevel": "desktop-3",
+  "macVersion": "0.1.9",
+  "windowsVersion": "0.1.10",
   "minimumMacOS": "13.0",
   "features": [
     "reviewed_import",
@@ -17,6 +17,11 @@
     "persistent_preferences",
     "offline_runtime",
     "managed_backend_lifecycle",
-    "per_product_targets"
+    "per_product_targets",
+    "paired_daily_import",
+    "persistent_product_catalog",
+    "reviewed_daily_updates",
+    "filtered_daily_export",
+    "complete_source_protection"
   ]
 }

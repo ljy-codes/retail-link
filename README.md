@@ -8,6 +8,14 @@ Mac v0.1.5（Intel / macOS13+），功能基线 desktop-1。采用原生AppKit/W
 
 Mac采用奇数补丁号，Windows采用紧随的偶数。本轮Windows配对v0.1.6；Windows需在Windows系统实现、打包和验收，当前没有Windows安装包。本机由Mac带头做功能、全功能分析和覆盖测试，Windows复用同一业务代码和功能清单，只替换平台交互层。
 
+## 分支与源码版本
+
+长期分支为 [main](https://github.com/ljy-codes/retail-link/tree/main)、[macos](https://github.com/ljy-codes/retail-link/tree/macos)、[windows](https://github.com/ljy-codes/retail-link/tree/windows)。main维护共享业务代码、测试和概览；平台分支保留完整工程，负责系统适配、构建与发布记录。Mac带头实现与验证，Windows同步同一功能基线。
+
+当前Mac源码标签为 `v0.1.5-macos`，对应已验收源码70e7618。Windows0.1.6仍待实机适配与打包，无已发布Windows标签。完整规则见 [GitHub分支与版本规定](docs/GitHub分支与版本规定.md)。
+
+11月22日答疑5项已全部确认并归档：净销量、单品85%、货损双轨、可选源写回、先人工下载。当前实现差距见 [阶段性总结顶部](docs/阶段性总结.md)，不能将这些方向直接列作v0.1.5全部已实现的能力。
+
 ## 使用与交付
 
 产品交付仅保留最新安装包DMG与版本对应的HTML使用说明，两文件。安装包与运行环境二进制不放入源码仓库。

@@ -3,5 +3,8 @@
   "version": "0.1.5",
   "featureLevel": "desktop-1",
   "pairedWindowsVersion": "0.1.6",
-  "releaseDate": "2026-11-23"
+  "releaseDate": "2026-11-23",
+  "platform": "mac",
+  "buildStatus": "intel-trial-verified",
+  "sharedSourceCommit": "1366927c25442e71f614bc3989cf57c4a06bf5a2"
 }

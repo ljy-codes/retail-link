@@ -1,3 +1,5 @@
+> 当前分支：**macos**。Mac 0.1.5。Intel Mac/macOS13+试用包已验收；Apple Silicon与Developer ID公证待验证。 [平台记录](docs/平台发布记录.md)。
+
 # 零售通 Retail Link
 
 本地电商经营工具：Excel导入、库存销量看盘、每日价格记录、问题追溯、历史、Excel安全导出与轻量数据迁移。

@@ -103,6 +103,13 @@ class DailyStore:
                     savedAt TEXT NOT NULL, action TEXT NOT NULL, snapshot TEXT NOT NULL
                 );
                 CREATE INDEX IF NOT EXISTS daily_date ON daily_records(deleted, date);
+                CREATE TABLE IF NOT EXISTS product_catalog (
+                    sourceProduct TEXT NOT NULL, sourceShop TEXT NOT NULL DEFAULT '',
+                    product TEXT NOT NULL, name TEXT NOT NULL,
+                    specification TEXT NOT NULL DEFAULT '', shop TEXT NOT NULL DEFAULT '',
+                    source TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 1,
+                    updatedAt TEXT NOT NULL, PRIMARY KEY(sourceProduct,sourceShop)
+                );
             ''')
 
     @contextmanager
@@ -177,6 +184,8 @@ class DailyStore:
         if existing is not None:
             if on_conflict == "skip" or existing["deleted"]:
                 return {"record": self._row(existing), "status": "skipped", "reason": "已有已删除记录，请先恢复。" if existing["deleted"] else "同日同商品已有记录，默认保留原值。"}
+            if all(normalized[field] == existing[field] for field in ("name", "price", "salesQuantity")):
+                return {"record": self._row(existing), "status": "skipped", "reason": "内容未变化，不生成重复版本。"}
             if on_conflict == "merge":
                 normalized = dict(normalized)
                 for field in ("price", "salesQuantity"):
@@ -241,6 +250,27 @@ class DailyStore:
         with self._connect() as connection:
             return {(row[0], row[1], row[2]) for row in connection.execute("SELECT date,product,shop FROM daily_records")}
 
+    def reviewed_import(self, records, on_conflict="skip", preview_only=True, expected_fingerprint=None,
+                        require_fingerprint=False, context=None):
+        from .daily_import import review_records
+        if on_conflict not in {"skip", "merge", "replace"}:
+            raise ValueError("重复处理方式仅支持 skip、merge 或 replace。")
+        if not preview_only and require_fingerprint and not expected_fingerprint:
+            raise ValueError("请先预览导入结果，再携带预览指纹确认保存。")
+        normalized = [_normalized(record) for record in records]
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            result = review_records(connection, normalized, on_conflict, context)
+            if expected_fingerprint and expected_fingerprint != result["previewFingerprint"]:
+                raise ValueError("预览后的记录或商品对照已变化，请重新预览后保存。")
+            if not preview_only:
+                counts = {"saved": 0, "skipped": 0, "replaced": 0}
+                for item in normalized:
+                    saved = self._save(connection, item, on_conflict)
+                    counts[{"created": "saved", "skipped": "skipped", "updated": "replaced"}[saved["status"]]] += 1
+                result.update(counts)
+            return result
+
 
 def _column(value):
     if not value:
@@ -256,6 +286,7 @@ def _column(value):
 
 def inspect_daily(path, filename):
     from .analyzer import inspect_workbook
+    from .daily_import import detect_paired_mapping
     information = inspect_workbook(path)
     aliases = {"date": ["日期", "业务日期", "销售日期", "date"], "product": ["商品编码", "商品id", "sku", "产品代码", "简称", "商品", "产品"],
                "name": ["商品名称", "产品名称", "产品全称", "name"], "shop": ["店铺", "仓库", "仓位", "shop"],
@@ -270,8 +301,14 @@ def inspect_daily(path, filename):
                     columns[field] = match["column"]
                     break
         score = (5 if columns.get("price") else 0) + (3 if columns.get("product") else 0) + (2 if columns.get("date") else 0) + (1 if "价" in sheet["name"] else 0)
+        mapping = {"sheet": sheet["name"], "layout": "long", "headerRow": sheet.get("headerRow", 1), "columns": columns}
+        paired = detect_paired_mapping(path, sheet["name"])
+        if paired:
+            mapping = paired
+            score += 100
+        sheet["mapping"] = mapping
         if best is None or score > best[0]:
-            best = (score, {"sheet": sheet["name"], "headerRow": sheet.get("headerRow", 1), "columns": columns})
+            best = (score, mapping)
     guessed_date = ""
     match = re.search(r"(20\d{2})[-_.年]?(\d{2})[-_.月]?(\d{2})", filename)
     if match:
@@ -287,6 +324,9 @@ def parse_import(entry, body):
     mapping = body.get("mapping")
     if not isinstance(mapping, dict):
         raise ValueError("请先配置价格表的工作表和字段。")
+    if mapping.get("layout") == "paired_dates":
+        from .daily_import import parse_paired
+        return parse_paired(entry, body)
     wb = openpyxl.load_workbook(entry["path"], data_only=True)
     sheet_name = str(mapping.get("sheet", ""))
     if sheet_name not in wb.sheetnames:
@@ -349,23 +389,43 @@ def handle_daily_request(handler, method, path, query, body, data_dir, lookup):
     one = lambda key, default="": (query.get(key) or [default])[0]
     if method == "GET" and path == "/api/daily":
         handler.send_json(store.list(one("start"), one("end"), one("product"), one("shop"), one("deleted", "0") == "1", one("offset", "0"), one("limit", "500")))
+    elif method == "GET" and path == "/api/daily/export":
+        import base64
+        from .daily_export import export_daily
+        output = export_daily(store, query, one("format", "xlsx"))
+        if isinstance(output, dict):
+            handler.send_json(output)
+        else:
+            handler.send_json({"filename": "零售通-日记录." + one("format", "xlsx"),
+                "contentType": "text/csv;charset=utf-8" if one("format") == "csv" else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                "dataBase64": base64.b64encode(output).decode("ascii")})
+    elif method == "GET" and path == "/api/daily/catalog":
+        from .daily_import import list_catalog
+        handler.send_json(list_catalog(store))
+    elif method == "POST" and path == "/api/daily/catalog":
+        from .daily_import import save_catalog
+        handler.send_json(save_catalog(store, body.get("record"), body.get("expectedRevision")))
+    elif method == "POST" and path == "/api/daily/catalog/import":
+        from .daily_import import import_catalog
+        handler.send_json(import_catalog(store, lookup(body.get("workbookId")), body))
     elif method == "GET" and path == "/api/daily/inspect":
         entry = lookup(one("workbookId"))
         handler.send_json(inspect_daily(entry["path"], entry.get("filename") or Path(entry["path"]).name))
     elif method == "POST" and path == "/api/daily":
         handler.send_json(store.save(body.get("record"), body.get("onConflict", "skip")))
     elif method == "POST" and path == "/api/daily/import":
+        from .daily_import import apply_catalog
         entry = lookup(body.get("workbookId"))
-        result = parse_import(entry, body)
+        result = apply_catalog(store, parse_import(entry, body))
         existing = store.existing_keys()
         result["existingCount"] = sum((row["date"], row["product"], row["shop"]) in existing for row in result["records"])
-        if body.get("previewOnly", True):
-            handler.send_json(result)
-        else:
-            if not result["records"]:
-                raise ValueError("没有可保存的日记录，请先修正映射或数据问题。")
-            result.update(store.save_many(result["records"], body.get("onConflict", "skip")))
-            handler.send_json(result)
+        if not body.get("previewOnly", True) and not result["records"]:
+            raise ValueError("没有可保存的日记录，请先修正映射或数据问题。")
+        result.update(store.reviewed_import(result["records"], body.get("onConflict", "skip"),
+            body.get("previewOnly", True), body.get("previewFingerprint"),
+            require_fingerprint=(body.get("mapping") or {}).get("layout") == "paired_dates",
+            context={key: body.get(key) for key in ("mapping", "quantityIsDaily", "snapshotDate")}))
+        handler.send_json(result)
     else:
         match = re.fullmatch(r"/api/daily/([a-f0-9]{32})(/restore|/revisions)?", path)
         if not match:

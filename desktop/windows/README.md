@@ -1,10 +1,10 @@
 # Windows 跟随实现约定
 
-对应 Mac v0.1.7 的 Windows 版本为 v0.1.8，功能基线 `desktop-2`。补丁版本号 Mac 使用奇数、Windows 使用紧随其后的偶数；每轮先完成 Mac 的功能与覆盖测试，再在 Windows 环境实现原生交互与打包。
+对应 Mac v0.1.9 的 Windows 版本为 v0.1.10，功能基线 `desktop-3`。补丁版本号 Mac 使用奇数、Windows 使用紧随其后的偶数；每轮先完成 Mac 的功能与覆盖测试，再在 Windows 环境实现原生交互与打包。
 
 必须复用同一 `server.py`、`backend/`、`web/` 与 `desktop/release.json` 中的功能清单，不单独复制修改业务算法。只替换桌面容器、文件／保存对话框、路径、进程管理和安装／卸载实现。
 
-运行协议：内置 Python 启动 `server.py --desktop --port 0 --data-dir ... --original-dir ... --export-dir ... --ready-file ...`；读取 `{url,version,pid}` 后显示 WebView。应用包元数据 `版本.json` 写入 `version=0.1.8`、`platform=windows` 和相同的 `featureLevel=desktop-2`。
+运行协议：内置 Python 启动 `server.py --desktop --port 0 --data-dir ... --original-dir ... --export-dir ... --ready-file ...`；读取 `{url,version,pid}` 后显示 WebView。应用包元数据 `版本.json` 写入 `version=0.1.10`、`platform=windows` 和相同的 `featureLevel=desktop-3`。
 
 若使用WebView2，应注入 `window.webkit.messageHandlers.retailLinkDesktop.postMessage` 兼容入口，转发到宿主消息通道；结果仍回调 `window.RetailLinkDesktop.resolve`。
 

@@ -42,6 +42,7 @@ class MigrationService:
     _SECRET_RE = re.compile(r"password|passwd|cookie|token|api.?key|authorization|secret|credential", re.I)
     RECORD_COLUMNS = {"id", "date", "product", "name", "shop", "price", "salesQuantity", "source", "createdAt", "updatedAt", "deleted", "revision"}
     REVISION_COLUMNS = {"seq", "recordId", "savedAt", "action", "snapshot"}
+    CATALOG_COLUMNS = {"sourceProduct", "sourceShop", "product", "name", "specification", "shop", "source", "revision", "updatedAt"}
 
     def __init__(self, data_dir, audit=None, app_version="0.1.2"):
         self.data_dir = Path(data_dir).expanduser().resolve()
@@ -228,7 +229,7 @@ class MigrationService:
                 if conn.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
                     raise MigrationError("日记录数据库完整性校验失败。")
                 objects = conn.execute("SELECT type,name FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'").fetchall()
-                if any(kind not in ("table", "index") or (kind == "table" and name not in ("daily_records", "daily_revisions")) for kind, name in objects):
+                if any(kind not in ("table", "index") or (kind == "table" and name not in ("daily_records", "daily_revisions", "product_catalog")) for kind, name in objects):
                     raise MigrationError("日记录数据库含不支持的结构。")
                 for table, expected in (("daily_records", cls.RECORD_COLUMNS), ("daily_revisions", cls.REVISION_COLUMNS)):
                     columns = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
@@ -247,8 +248,29 @@ class MigrationService:
                     saved = json.loads(snapshot)
                     if not isinstance(saved, dict) or saved.get("id") != record_id:
                         raise MigrationError("日记录旧版本内容无效。")
+                catalog_count = 0
+                if ("table", "product_catalog") in objects:
+                    columns = {row[1] for row in conn.execute("PRAGMA table_info(product_catalog)")}
+                    if columns != cls.CATALOG_COLUMNS:
+                        raise MigrationError("商品关联字段不兼容。")
+                    keys = set()
+                    for row in conn.execute("SELECT sourceProduct,sourceShop,product,name,specification,shop,source,revision,updatedAt FROM product_catalog"):
+                        source_product, source_shop, product, name, specification, shop, source, revision, updated = row
+                        if (not isinstance(source_product, str) or not source_product.strip() or len(source_product) > 200
+                                or not isinstance(product, str) or not product.strip() or len(product) > 200
+                                or any(not isinstance(v, str) or len(v) > 500 for v in (source_shop, name, specification, shop))
+                                or not isinstance(revision, int) or revision < 1):
+                            raise MigrationError("商品关联内容无效。")
+                        key = (source_product, source_shop)
+                        if key in keys:
+                            raise MigrationError("商品关联含重复来源。")
+                        keys.add(key)
+                        json.loads(source)
+                        datetime.fromisoformat(updated)
+                        catalog_count += 1
                 return {"dailyRecords": conn.execute("SELECT COUNT(*) FROM daily_records").fetchone()[0],
-                        "dailyRevisions": conn.execute("SELECT COUNT(*) FROM daily_revisions").fetchone()[0]}
+                        "dailyRevisions": conn.execute("SELECT COUNT(*) FROM daily_revisions").fetchone()[0],
+                        "productCatalog": catalog_count}
             finally:
                 conn.close()
         except MigrationError:
@@ -268,7 +290,7 @@ class MigrationService:
             original.close()
 
     def _validate_files(self, files):
-        counts = {"history": 0, "historyDeleted": 0, "dailyRecords": 0, "dailyRevisions": 0, "preferences": 0, "importTemplates": 0, "logFiles": 0}
+        counts = {"history": 0, "historyDeleted": 0, "dailyRecords": 0, "dailyRevisions": 0, "productCatalog": 0, "preferences": 0, "importTemplates": 0, "logFiles": 0}
         ids = set()
         for name, path in files.items():
             match = self._HISTORY_RE.fullmatch(name)

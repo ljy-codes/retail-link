@@ -17,7 +17,7 @@
   <header class="topbar">
     <div class="top-inner">
       <a class="brand" href="#top"><span class="mark" aria-hidden="true">零</span><span><span class="brand-title">零售通</span><br><span class="brand-sub">PROJECT PLAN</span></span></a>
-      <nav class="top-links" aria-label="项目文档"><a href="task.md">开发记录</a><a href="答疑文档/零售通-20261121.xlsx">答疑文档</a><a href="阶段性总结.md">阶段总结</a><button class="print-btn" type="button" onclick="window.print()">打印规划</button></nav>
+      <nav class="top-links" aria-label="项目文档"><a href="task.md">开发记录</a><a href="答疑文档/零售通-20261123.xlsx">答疑文档</a><a href="阶段性总结.md">阶段总结</a><button class="print-btn" type="button" onclick="window.print()">打印规划</button></nav>
     </div>
   </header>
 
@@ -31,7 +31,7 @@
       </div>
       <aside class="status-card" aria-label="版本状态">
         <div class="label">当前版本状态</div>
-        <div class="status"><span class="dot" aria-hidden="true"></span><span id="release-status">v0.1.7 单品考核Mac App</span></div>
+        <div class="status"><span class="dot" aria-hidden="true"></span><span id="release-status">v0.1.9 原表接入Mac App</span></div>
         <div class="date">规划更新：2026-11-23 · Asia/Shanghai</div>
       </aside>
     </div>
@@ -52,6 +52,7 @@
       <a href="#product-requirements"><span class="num">＋</span> 产品运行要求</a>
       <a href="#local-files"><span class="num">＋</span> 本地文件与迁移</a>
       <a href="#combined-import"><span class="num">＋</span> 组合输入与格式确认</a>
+      <a href="#next-iteration"><span class="num">＋</span> 本轮成果与下一步</a>
       <a href="#roadmap"><span class="num">05</span> 阶段路线</a>
       <a href="#connectivity"><span class="num">＋</span> 离线与线上</a>
       <a href="#data-quality"><span class="num">＋</span> 问题数据查看</a>
@@ -64,7 +65,7 @@
     <main class="content">
             <section class="section" id="delivery-principles">
         <div class="section-head"><div><div class="section-kicker">长期工程 · 推进原则</div><h2>问题服务主线，不让细节拖慢进度</h2></div><span class="pill">持续遵守</span></div>
-        <p class="intro">零售通是长期大工程。每日疑问和问题处理以当前阶段目标为中心，先保证主线持续产生可验证结果，再集中处理低优先级细节。</p><p>GitHub长期使用main、macos、windows三分支。共享功能在main维护，Mac带头验证，Windows按同一基线跟随。规则见<a href="GitHub分支与版本规定.md">GitHub分支与版本规定</a>；当前Mac标签对应已验收源码，Windows分支不代表已完成安装包。</p>
+        <p class="intro">零售通是长期大工程。每日疑问和问题处理以当前阶段目标为中心，先保证主线持续产生可验证结果，再集中处理低优先级细节。</p><p>GitHub长期使用main、macos、windows三分支。共享功能在main维护，Mac带头验证，Windows按同一基线跟随。规则见<a href="GitHub分支与版本规定.md">GitHub分支与版本规定</a>；本轮仅同步本机工作区，不提交、推送、打标签或发布。Windows分支不代表已完成安装包。</p>
         <div class="table-wrap"><table><thead><tr><th>原则</th><th>执行方式</th></tr></thead><tbody>
           <tr><td>控制问题数量</td><td>每份日期答疑最多保留 5 项，优先记录影响多个功能、阻塞验证或可能造成错误决策的问题。</td></tr>
           <tr><td>问题分级</td><td>高优先级立即处理；低优先级先记录到答疑文档，不打断当前开发和验证主线。</td></tr>
@@ -84,16 +85,18 @@
       </section>
 
       <section class="section" id="scope">
-        <div class="section-head"><div><div class="section-kicker">02 · 当前版本</div><h2>v0.1.7：单品考核与任务闭环</h2></div><span class="pill">已实现 · 已验证</span></div>
-        <p>用户明确先做 <strong>库存与销量计算、每日经营表</strong>。本版围绕这两个结果构建文件导入、映射配置、异常提示和手工修正。</p>
+        <div class="section-head"><div><div class="section-kicker">02 · 当前版本</div><h2>v0.1.9：原表接入与商品关联</h2></div><span class="pill">已实现 · 已验证</span></div>
+        <p>用户明确先做 <strong>库存与销量计算、每日经营表</strong>。本轮在既有看盘与单品任务基础上，完成双层日期价量表导入、商品对照、逐项差异确认和日记录筛选导出，作为v0.2阶段的首个增量。</p>
         <div class="table-wrap"><table><thead><tr><th style="width:20%">能力</th><th>当前具体范围</th><th style="width:15%">状态</th></tr></thead><tbody>
           <tr><td>文件入口</td><td>选择或拖入 <code>.xlsx</code>、<code>.xlsm</code>；提供现有样例入口；输入本机目录路径，扫描后勾选1—8份文件，逐表确认角色或忽略，预览后分析。</td><td><span class="pill">已实现</span></td></tr>
           <tr><td>自动识别与配置</td><td>识别常见工作表和表头；可修改数据角色、工作表、表头行与列映射；支持横向日期表和按日期逐行记录的长表。</td><td><span class="pill">已实现</span></td></tr>
           <tr><td>经营看盘</td><td>月计划与报单达成、距目标差额、出库与供价金额、折扣比例／折价幅度、货损金额与货损率。</td><td><span class="pill">已实现</span></td></tr>
           <tr><td>库存与销量</td><td>现货与在途分开展示；按统计期间筛选销量，计算完整观察窗口的日均销量；库存池确认后计算现货可售天数。</td><td><span class="pill">已实现</span></td></tr>
           <tr><td>核对与人工补正</td><td>显示日期、编码、源金额与明细差异；可预览原表、查看单元格来源；支持修正商品计划、现货数量／金额、供价和货损金额，并可还原。</td><td><span class="pill">已实现</span></td></tr>
+          <tr><td>原表与商品关联</td><td>双层日期下的销量／售价可直接展开，继承合并仓位并保留完整年份；订货表可预览导入商品对照，按来源商品ID与仓位精确关联，手动编辑后持久保存并随数据迁移。</td><td><span class="pill">本轮完成</span></td></tr>
+          <tr><td>差异确认与日记录导出</td><td>逐项显示新增、未变、可补齐及冲突旧新值，显式更新保留旧版；Excel/CSV导出完整筛选范围，说明日期、商品、仓位和来源。商品关联目前用于日记录导入，既有历史不追溯改写。</td><td><span class="pill">本轮完成</span></td></tr>
           <tr><td>结果与配置保存</td><td>可复用口径和字段配置保存在当前浏览器；分析结果与当次配置保存在本地记录；预览后将五工作表 Excel 保存到指定现有目录，保留 CSV 下载，并支持应用数据迁移。</td><td><span class="pill">已实现</span></td></tr>
-          <tr><td>完整使用验证</td><td>已验证文件、历史、日记录、本地Excel与迁移；本轮追加组合输入、库存快照冲突、模板变更、范围追溯及HTTP闭环验证。具体数量与证据见task.md。</td><td><span class="pill">已验证</span></td></tr>
+          <tr><td>完整使用验证</td><td>最终221项Python、55项界面与外观测试通过；浏览器及隔离Mac原生保存均重读核对。真实价量表169组均空白，仅验证结构；真实业务对账尚未完成。</td><td><span class="pill">已验证技术流程</span></td></tr>
         </tbody></table></div>
         <div class="callout">当前的“目录读取”是扫描并手动选择文件。目录定时监听、无人值守刷新与 URL 读取属于后续阶段。</div>
       </section>
@@ -180,13 +183,14 @@
       </section>
 
       <section class="section" id="daily-prices">
-        <div class="section-head"><div><div class="section-kicker">每日经营数据 · 新增需求</div><h2>按日记录每款售价，关联同一天的销量</h2></div><span class="pill pending">本轮新增 · 已实现</span></div>
+        <div class="section-head"><div><div class="section-kicker">每日经营数据 · v0.1.9增强</div><h2>按日记录每款售价，关联同一天的销量</h2></div><span class="pill">已实现 · 已验证</span></div>
         <p class="intro">用户每天维护一份价格表，次日另存后更新售价。平台应把这些文件转成可持续累积的日记录，而不是只保留最新价格。价格表格式变化时，沿用自动识别与人工映射入口。</p>
         <div class="table-wrap"><table><thead><tr><th>能力</th><th>具体实现与边界</th></tr></thead><tbody>
           <tr><td>按日保存</td><td>以日期、商品及适用店铺／仓库作为关联键，分别保存当日售价和销量、来源及导入时间。11月21日的新价不能覆盖11月20日记录。</td></tr>
-          <tr><td>变动格式适配</td><td>识别常见日期、商品、售价和销量列；人工选择工作表、表头行、字段列。每日快照表没有日期列时，导入前必须明确该份表的生效日期。</td></tr>
+          <tr><td>变动格式适配</td><td>识别常见长表、单日快照及双层日期价量横表；日期表头、销量／售价表头和列可调，错列或跨日期组会明确提示。合并仓位可继承，完整年份不猜测；无日期快照仍须指定业务日期。</td></tr>
           <tr><td>日期准确对应</td><td>只把同一天的价格与销量配对；今日售价不能直接用于昨日销量。缺少某日价格或销量时保留空缺，不擅自沿用最新价格。若一天多次变价，后续可细化时段或成交明细。</td></tr>
-          <tr><td>历史与去重</td><td>同日同商品重复导入默认跳过；价格与销量分表时可补齐空白字段，非空值冲突需核对，显式替换保留旧版本依据。支持筛选日期、商品，查看每日列表及价格／销量变化，提供手工补录、软删除与恢复。</td></tr>
+          <tr><td>历史与去重</td><td>同日期、商品与仓位唯一；逐项预览名称、售价及销量的旧新差异，默认跳过重复；只把旧空到新有标为补齐，旧有变空列冲突。映射、策略或旧值变化后须重新预览；显式更新保留旧版，支持软删除与恢复。</td></tr>
+          <tr><td>商品对照与导出</td><td>商品ID、规格与仓位可从订货表预览导入和手动维护，不按名称自动合并。Excel/CSV按筛选范围导出全部匹配日记录；Excel同时附范围口径和当前商品对照，历史仍使用保存时的标识与数值。</td></tr>
           <tr><td>金额含义</td><td>日记录的售价可能是标价，售价乘销量只可称为估算金额；实际成交额仍应来自平台成交数据，不据此推算真实利润。</td></tr>
         </tbody></table></div>
         <div class="callout">先建立“导入／补录 → 日期与商品匹配 → 保存日记录 → 翻看价格和销量”的闭环。涨价后销量变化可用于观察，不直接宣称价格造成销量变化。</div>
@@ -245,20 +249,32 @@
         </tbody></table></div>
       </section>
 
-      <section class="section" id="desktop-delivery"><div class="section-head"><div><div class="section-kicker">v0.1.7 · 2026-11-23</div><h2>产品交付只保留两个文件</h2></div><span class="pill">最新安装包 + 对应HTML说明</span></div><p>产品交付目录只保留“零售通-v0.1.7-mac-Intel.dmg”和“零售通-v0.1.7-使用说明.html”。源码、构建与系统适配在开发空间；虚构样本、日志、截图与测试在测试空间；原始资料与正式数据独立保留。升级不清用户数据。</p><p>当前验证包括内置运行环境独立性、只读中文路径、原生文件选择和CSV下载、跨端口配置恢复、正常退出与强退回收。Windows包、Apple Silicon原生验证、正式公证和完整实机安装/卸载矩阵仍待对应环境完成，不能标成当前已通过。</p></section>
+      <section class="section" id="desktop-delivery"><div class="section-head"><div><div class="section-kicker">v0.1.9 · 2026-11-23</div><h2>产品交付只保留两个文件</h2></div><span class="pill">最新安装包 + 对应HTML说明</span></div><p>产品交付仅保留“零售通-v0.1.9-mac-Intel.dmg”和“零售通-v0.1.9-使用说明.html”。源码、构建与系统适配在开发空间；虚构样本、日志、截图与测试在测试空间；原始资料与正式数据独立保留。升级不清用户数据。</p><p>本轮Mac App已构建，隔离原生界面与系统存储面板保存Excel已验证，重读包含4条日记录与2条商品对照，正常退出端口和ready状态清理通过。DMG只读挂载、逐文件哈希与代码签名完整性均通过，已完成两文件交付；重启后日记录与商品关联仍保留。Windows包、Apple Silicon原生验证、正式公证和完整实机安装/卸载矩阵仍待对应环境完成。</p></section>
 
       <section class="section" id="product-targets"><div class="section-head"><div><div class="section-kicker">v0.1.7 · 本轮实现</div><h2>总额达到100%，也不能掩盖单品缺口</h2></div><span class="pill">已实现 · 已验证</span></div><p>每款独立判断门槛。总览显示已达标、未达标、待核对数量，可点击筛选；未达标默认按缺口优先。完整缺口合计为各款正差额之和，超额不抵扣其他款，剩余每日任务按截止日后至月末的自然日均摊。</p><p>缺计划、缺完成或非正计划标为待核对，保留已知部分，完整任务不显示为0。月末仍有缺口时提示已到期。Excel/CSV携带考核目标、状态、缺口与任务；旧历史保留保存时的数值和口径，重新分析生成新记录。</p></section>
+
+      <section class="section" id="next-iteration">
+        <div class="section-head"><div><div class="section-kicker">2026-11-23 · 本轮成果与下一步</div><h2>原表接入增量完成，下一主线转向净销量</h2></div><span class="pill">本轮已完成 · v0.2继续推进</span></div>
+        <p class="intro">以v0.2阶段目标为准，用小版本持续交付。已有资料对应的格式、关联、核对和导出流程已完成；细节继续分批答疑，不等待全部问题答完。</p>
+        <div class="table-wrap"><table><thead><tr><th>增量</th><th>当前成果或下一目标</th><th>验收边界与推进方式</th></tr></thead><tbody>
+          <tr><td>本轮四项已完成</td><td>双层日期价量导入、最小商品对照、逐项旧新差异确认与版本更新、完整筛选范围导出；重复导入不翻倍，保留完整年份和原始来源。</td><td>真实表识别13日期组、169空白价量组，仅结构已验证。同结构虚构数据完成浏览器和隔离原生保存验收，真实业务数值对账仍待开展。</td></tr>
+          <tr><td>下一主线：净销量</td><td>发货与售后关联、去重，原始量、扣减原因、净销量和差异可查；真实样本与人工结果逐步对账。</td><td>尚未实施。按已确认的净销量方向推进，真实导出到位后适配；缺来源或细则仅限制对应结果，不停止其他已明确工作。</td></tr>
+          <tr><td>后续分批落地</td><td>净销量后补货损双轨；受控写回单独成版。输入规则稳定后进入目录自动化与URL/API阶段。</td><td>每轮明确验收和遗留项，达到条件就交付，不把所有细节绑成一个大版本。</td></tr>
+        </tbody></table></div>
+        <p>当前Mac0.1.9／Windows配对计划0.1.10，共享desktop-3。组合历史恢复后的组成原件覆盖保护已修复并新增14项回归；最终221项Python与55项界面/外观测试通过。Windows仍未完成实机适配和打包，本轮仅同步本机源码工作区，不执行远程发布。</p>
+        <div class="callout">今日仅3项答疑，每项注明未答时的推进方案。详见<a href="答疑文档/零售通-20261123.xlsx">今日答疑</a>与<a href="下一版本分析-20261123.md">下一版本分析</a>。时间盒是范围控制建议，不是固定发布日期。</div>
+      </section>
 
       <section class="section" id="roadmap">
         <div class="section-head"><div><div class="section-kicker">05 · 阶段路线</div><h2>先把一次分析做可靠，再逐步减少人工操作</h2></div></div>
         <p>各阶段以完成验收为推进依据。以下是实现路线，不承诺固定日期，也不将未来能力算入当前交付。</p>
         <div class="roadmap">
           <details class="phase" open><summary><span class="phase-no">v0.1</span><span class="phase-title">本地看盘与组合输入原型</span><span class="pill">当前 · 原型已交付</span></summary><div class="phase-body"><p>完成选择／拖入 Excel、目录扫描选取、映射与规则配置、看盘、异常定位、手工修正和结果导出。使用现有样例验证计算，再验证真实浏览器操作及最新版本启动。</p><div class="scope"><span>本地运行</span><span>多文件与逐表确认</span><span>用户主动触发分析</span></div></div></details>
-          <details class="phase" open><summary><span class="phase-no">v0.2</span><span class="phase-title">固定真实业务口径，适配日常原始表</span><span class="pill future">后续</span></summary><div class="phase-body"><p>补齐仓库登记与平台原始导出样本，确认计划考核、库存池、折价和金额调整口径。建立稳定商品编码对照和输入配置，验证多日数据、跨月、重复导入与人工结果一致性。在本轮完整历史快照的基础上，继续完善已实现的多文件合并，推进历史对比和输入版本管理，避免反复人工整理中间表。</p><div class="scope"><span>原始数据适配</span><span>稳定业务规则</span><span>历史与重复处理</span></div></div></details>
+          <details class="phase" open><summary><span class="phase-no">v0.2</span><span class="phase-title">固定真实业务口径，适配日常原始表</span><span class="pill future">进行中 · 首个增量完成</span></summary><div class="phase-body"><p>计划考核、库存归属和金额重算方向已有答复，不重复追问。Mac0.1.9已完成双层日期价量表、最小商品对照、差异确认与筛选导出；真实表全空价量仅完成结构验证。下一步推进发货/售后导出与净销量对账，随后补货损双轨，逐步验证连续真实数据、跨月、重复导入与人工结果一致性。新增资料只影响对应适配或验收，其他已明确工作继续推进。阶段以选定真实范围的连续导入与人工对账完成为退出条件，首个增量交付不等于整个v0.2结束。</p><div class="scope"><span>原始数据适配</span><span>稳定业务规则</span><span>历史与重复处理</span></div></div></details>
           <details class="phase"><summary><span class="phase-no">v0.3</span><span class="phase-title">受控的文件自动化</span><span class="pill future">后续</span></summary><div class="phase-body"><p>在固定输入规则后，增加可配置目录监听／定时扫描、变更检测、自动重算及失败提示。明确文件未写完、重复文件、缺失文件、异常数据的处理方法；保留暂停、手动重跑和结果追溯。只有无人值守验证通过后，才称为自动读取。</p><div class="scope"><span>目录监听</span><span>调度与重试</span><span>人工接管</span></div></div></details>
           <details class="phase"><summary><span class="phase-no">v0.4</span><span class="phase-title">URL 与其他数据来源接入</span><span class="pill future">后续评估</span></summary><div class="phase-body"><p>按实际数据源评估 URL 读取与正式接口。逐项明确访问方式、认证、更新频率、字段映射和失败恢复；沿用现有标准数据与分析接口。URL 接入不自动等同于平台登录、全站采集或后台自动操作。</p><div class="scope"><span>数据连接配置</span><span>来源适配</span><span>访问与失败恢复</span></div></div></details>
           <details class="phase"><summary><span class="phase-no">v1.x</span><span class="phase-title">形成多个独立工具共享数据的操控台</span><span class="pill future">长期方向</span></summary><div class="phase-body"><p>根据使用频率和实际收益，扩展到货、价格、活动、采购交接等已验证场景。共享商品、库存、销量和基础配置，保持各工具可以独立使用。自定义公式、到货核销、利润核算等，须先补齐规则与验证再单独立项。</p><div class="scope"><span>按场景扩展</span><span>共享基础数据</span><span>保留手工路径</span></div></div></details>
-          <details class="phase" open><summary><span class="phase-no">桌面版</span><span class="phase-title">Mac带头，Windows同功能跟随</span><span class="pill">Mac0.1.7已交付／Windows0.1.8待适配</span></summary><div class="phase-body"><p>Mac采用AppKit/WKWebView独立窗口，内置Python/openpyxl，程序资源只读，配置与历史独立持久化；支持原生对话框、下载、启动进度、单实例和退出/强退回收。当前已验证Intel Mac/macOS13+。Windows必须复用同一前后端、desktop-2功能清单与虚构样本验收，业务计算输出一致，仅替换系统交互层；安装包在Windows环境构建。</p><div class="scope"><span>Mac奇数／Windows偶数</span><span>Mac全功能覆盖先行</span><span>Windows同功能验收</span></div></div></details>
+          <details class="phase" open><summary><span class="phase-no">桌面版</span><span class="phase-title">Mac带头，Windows同功能跟随</span><span class="pill">Mac0.1.9已交付／Windows0.1.10待适配</span></summary><div class="phase-body"><p>Mac采用AppKit/WKWebView独立窗口，内置Python/openpyxl，程序资源只读，配置与历史独立持久化；支持原生对话框、下载、启动进度、单实例和退出/强退回收。当前已验证Intel Mac/macOS13+。Windows必须复用同一前后端、desktop-3功能清单与虚构样本验收，业务计算输出一致，仅替换系统交互层；安装包在Windows环境构建。</p><div class="scope"><span>Mac奇数／Windows偶数</span><span>Mac全功能覆盖先行</span><span>Windows同功能验收</span></div></div></details>
           <details class="phase"><summary><span class="phase-no">源码</span><span class="phase-title">客户确认方向可行后发布 GitHub</span><span class="pill future">有条件后续</span></summary><div class="phase-body"><p>客户认为方向可行后，再整理源码并上传 GitHub。提前区分代码、测试、交付包和本地业务数据；仓库不携带用户原始业务表、运行数据或登录凭据。GitHub已按用户后续授权推送至 ljy-codes/retail-link；源码与概览持续同步，原始业务表和运行数据不入库。</p></div></details>
         </div>
       </section>
@@ -266,12 +282,12 @@
       <section class="section" id="acceptance">
         <div class="section-head"><div><div class="section-kicker">06 · 验收标准</div><h2>可运行、算得清、能核对，才完成这一版</h2></div><span class="pill pending">当前验收快照</span></div>
         <div class="checklist">
-          <div class="check-item"><strong><span class="check-icon" aria-hidden="true">✓</span> 分析引擎行为验证</strong><p>23 项已通过：包括样例识别、自定义长表、日期边界、源金额与重算、手工零值、缺失与零的区分及原件不变。</p></div>
-          <div class="check-item"><strong><span class="check-icon" aria-hidden="true">✓</span> HTTP 与文件接口验证</strong><p>15 项已通过：覆盖服务状态、文件读取、工作簿识别、分析、预览和目录等接口；以测试空间报告为依据。</p></div>
-          <div class="check-item"><strong><span class="check-icon" aria-hidden="true">✓</span> 真实浏览器交互</strong><p>已验证：文件与目录导入、陌生格式人工映射、配置重算、手工零值与还原、单元格定位、历史删除恢复、每日价格导入及CSV导出。</p></div>
-          <div class="check-item"><strong><span class="check-icon" aria-hidden="true">✓</span> 最新版本独立交付</strong><p>已通过启动脚本语法检查并启动交付服务、生成样例看盘。交付仅19个必要文件，无旧版、自测数据和缓存；持久数据位于独立目录。</p></div>
+          <div class="check-item"><strong><span class="check-icon" aria-hidden="true">✓</span> Python整包回归</strong><p>Mac0.1.9最终221项通过，覆盖原有分析、历史、迁移与桌面，以及双层价量、商品对照、差异确认、日记录导出和源文件保护。详见task.md追加记录55。</p></div>
+          <div class="check-item"><strong><span class="check-icon" aria-hidden="true">✓</span> 界面与外观交互</strong><p>16项日记录界面、23项单品界面、16项外观，共55项通过。浏览器实际验证4条价量、重复未变、冲突更新保留旧版、Excel下载重读及全空禁保存。</p></div>
+          <div class="check-item"><strong><span class="check-icon" aria-hidden="true">✓</span> Mac原生操作</strong><p>隔离API准备虚构数据后，App实际界面展示并通过系统存储面板保存Excel，重读核对4条日记录和2条商品对照；正常退出端口与ready状态清理通过。</p></div>
+          <div class="check-item"><strong><span class="check-icon" aria-hidden="true">✓</span> 最新版本独立交付</strong><p>Mac0.1.9已交付，DMG只读挂载、签名和逐文件哈希通过，产品目录仅安装包和对应HTML两文件；详情见本机测试空间/原表接入验收。Windows、Apple Silicon及完整卸载实机验收仍待对应环境。</p></div>
         </div>
-        <div class="callout">自测共65项：引擎23、HTTP接口15、历史存储10、每日价格与销量17。技术验证用于原型可用性，不能替代真实业务口径确认。</div>
+        <div class="callout">上述为本轮最终技术验证。真实原表识别13日期组、169空白价量组，数值流程使用隔离虚构资料；技术验证不能替代连续真实业务与人工结果对账。组合历史源文件保护缺口已修复，原件仍只读。</div>
         <div class="table-wrap"><table><thead><tr><th>业务验收项</th><th>判定要求</th></tr></thead><tbody>
           <tr><td>默认结果可信</td><td>样例严格截止日期下可生成 10 款商品的经营结果；跨年销量不可静默并入本期，未来记录不计入实际。</td></tr>
           <tr><td>配置实际生效</td><td>更改统计日期、考核口径、门槛、金额方式或映射后，结果相应重算；保存的配置可以复用。</td></tr>
@@ -294,7 +310,7 @@
         <div class="doc-cards">
           <article class="doc-card"><a href="项目规划.html">项目规划.html · 方向基准</a><p>记录长期目标、当前范围、具体实现、阶段路线与验收条件，防止开发偏离实际用途。</p></article>
           <article class="doc-card"><a href="task.md">task.md · 过程记录</a><p>按顺序追加每次进度、简短结论和下一步；不反复复制大段分析。</p></article>
-          <article class="doc-card"><a href="答疑文档/零售通-20261122.xlsx">答疑文档/零售通-20261122.xlsx · 本轮已答复</a><p>本轮5项已答，原件保留用户解答；今后只列新的问题或资料需求，每轮最多5项，底部保留今日想法。</p></article>
+          <article class="doc-card"><a href="答疑文档/零售通-20261123.xlsx">答疑文档/零售通-20261123.xlsx · 当前3项待答</a><p>发货售后样本、跨期售后、首批试用。每项注明未答时的推进方案，底部保留今日想法；11月22日已答原件继续保留。</p></article>
           <article class="doc-card"><a href="阶段性总结.md">阶段性总结.md · 重要结论</a><p>保存稳定阶段成果、详细依据、验证结论和限制，便于后续接续工作。</p></article>
         </div>
       </section>
@@ -306,10 +322,10 @@
           <tr><td>销量口径 C</td><td>使用净销量，保留发货、退款、退货与取消来源供核对。</td><td>当前汇总映射销量，尚未自动重建净销量。后续按订单/明细ID和状态去重、明确期间，缺字段不当作已净化数据。</td></tr>
           <tr><td>85%范围 A</td><td>按单个商品独立考核，完成额沿用报单金额。</td><td>Mac0.1.7已完成逐款状态、目标、正差额合计与每日任务；未知资料不计达标，月底显示已到期。整体合计不替代单品考核。</td></tr>
           <tr><td>货损核算 C</td><td>登记货损与“期初＋入库−出库−实盘”双轨核对，差异需确认。</td><td>完整双轨尚未实现。缺输入保留未计算，不静默替换登记值或把盘差直接认定为货损。</td></tr>
-          <tr><td>源文件写回 C</td><td>两种方式都支持，默认生成新文件；设置开启源写回后仍须每次预览确认。</td><td>v0.1.7原件仍只读，尚无写回开关。后续增加字段范围、备份、原子写、重读校验与恢复。</td></tr>
+          <tr><td>源文件写回 C</td><td>两种方式都支持，默认生成新文件；设置开启源写回后仍须每次预览确认。</td><td>当前v0.1.9原件仍只读，尚无写回开关。后续增加字段范围、备份、原子写、重读校验与恢复。</td></tr>
           <tr><td>首批来源 C</td><td>先人工下载线上文件，再由工具本地处理。</td><td>本地入口已具备，优先真实导出字段适配；URL/API只读连接保持后续目标。</td></tr>
         </tbody></table></div>
-        <p>单品目标考核已在Mac0.1.7完成；下一步适配发货/售后原始导出与净销量核对，随后补货损双轨。相关口径确认已结束，后续围绕实际字段和对账推进，不重复生成相同问题。</p>
+        <p>单品目标考核已在Mac0.1.7完成；Mac0.1.9进一步完成价量原表、商品关联、差异确认与日记录导出。下一主线是发货/售后净销量核对，随后补货损双轨。五项方向已确认，细节分批补充，不重复生成相同问题，也不等待全部问题答完才推进。</p>
       </section>
       <footer class="footer"><span>零售通 · 项目规划 · 2026-11-23</span><span>根据实际实现与验收持续更新</span></footer>
     </main>

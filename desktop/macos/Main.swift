@@ -3,7 +3,7 @@ import WebKit
 import Darwin
 
 private let applicationName = "零售通"
-private let applicationVersion = "0.1.5"
+private let applicationVersion = (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "0.1.7"
 private let bundleIdentifier = "com.retaillink.desktop.mac"
 
 private struct PendingDownload {

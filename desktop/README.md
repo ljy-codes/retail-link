@@ -1,6 +1,6 @@
 # 零售通桌面版开发
 
-版本配对按补丁号：Mac 奇数、Windows 紧随偶数；本轮 Mac 0.1.5 对应 Windows 0.1.6，统一功能级别 desktop-1。Mac 负责带头实现与全功能分析、覆盖测试；Windows 在 Windows 环境复用同一后端和前端，完成平台适配、对照验收与安装包。
+版本配对按补丁号：Mac 奇数、Windows 紧随偶数；本轮 Mac 0.1.7 对应 Windows 0.1.8，统一功能级别 desktop-2。Mac 负责带头实现与全功能分析、覆盖测试；Windows 在 Windows 环境复用同一后端和前端，完成平台适配、对照验收与安装包。
 
 macOS 使用 AppKit / WKWebView 原生壳，Python 后端仅监听系统分配的127.0.0.1端口；ready-file就绪后停止启动轮询。前端使用原生文件桥，所有设置持久化到应用数据，退出与父进程管道断开均回收后端。
 

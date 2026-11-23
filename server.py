@@ -41,7 +41,7 @@ def platform_name():
 
 def application_metadata():
     """The packaged app supplies its own platform release metadata."""
-    metadata = {"version": "0.1.5", "platform": platform_name(), "featureLevel": "desktop-1"}
+    metadata = {"version": "0.1.7", "platform": platform_name(), "featureLevel": "desktop-2"}
     source = APP_DIR / "版本.json"
     if source.is_file():
         saved = json.loads(source.read_text(encoding="utf-8"))

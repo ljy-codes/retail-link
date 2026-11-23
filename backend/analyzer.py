@@ -337,6 +337,41 @@ def _total_label(value):
     return _norm(value) in ("合计", "总计", "汇总", "小计", "总合计", "total", "grandtotal")
 
 
+def _plan_assessment(plan, completed, target, remaining_days):
+    """Assess one product before aggregating, without offsetting other products.
+
+    A missing or nonpositive plan does not establish a valid target. Preserve
+    that uncertainty separately from a known zero completion or a met target.
+    """
+    result = {"targetAmount": None, "targetGap": None, "dailyRequired": None,
+              "remainingDays": remaining_days, "assessmentStatus": "unknown"}
+    if plan is None:
+        result.update(assessmentReasonCode="missing_plan", assessmentReason="未提供月计划")
+        return result
+    if plan <= 0:
+        result.update(assessmentReasonCode="nonpositive_plan", assessmentReason="月计划需大于0，当前无法评价达标情况")
+        return result
+    result["targetAmount"] = plan * target
+    if completed is None:
+        result.update(assessmentReasonCode="missing_completed", assessmentReason="未提供当前考核口径的完成数据")
+        return result
+    # Only remove machine-precision noise at the boundary; do not round each
+    # product's requirement to currency units or average its achievement rate.
+    precision = max(1e-9, math.ulp(completed) * 2, math.ulp(result["targetAmount"]) * 2)
+    met = completed >= result["targetAmount"] or math.isclose(
+        completed, result["targetAmount"], rel_tol=0., abs_tol=precision)
+    result["targetGap"] = 0. if met else result["targetAmount"] - completed
+    result["assessmentStatus"] = "met" if met else "below"
+    if met:
+        result.update(dailyRequired=0., assessmentReasonCode="met", assessmentReason="已达到单品目标门槛")
+    elif remaining_days:
+        result.update(dailyRequired=result["targetGap"] / remaining_days,
+                      assessmentReasonCode="below", assessmentReason="尚未达到单品目标门槛")
+    else:
+        result.update(assessmentReasonCode="period_ended", assessmentReason="统计月份已结束，仍有未完成缺口")
+    return result
+
+
 def analyze_workbook(path, config):
     inspected = inspect_workbook(path)
     options = {**copy.deepcopy(inspected["config"]), **copy.deepcopy(config or {})}
@@ -633,7 +668,7 @@ def analyze_workbook(path, config):
     for pid, codes in platform_codes.items():
         if len(set(codes.values())) > 1:
             issues.add("PLATFORM_ID_CONFLICT", "同一商品的平台 ID 不一致", f"商品 {pid} 的平台销量 ID 为 {codes.get('sales', '—')}，出库 ID 为 {codes.get('outbound', '—')}；暂按商品标识关联，请核对是否换链接。", "warning", product=pid)
-    issues.add("PLAN_BASIS_ASSUMPTION", "计划考核采用可配置口径", f"当前口径：{ {'orders_amount':'报单金额', 'outbound_amount':'出库金额', 'orders_quantity':'报单小单位数量', 'outbound_quantity':'出库小单位数量', 'sales_quantity':'平台销售数量'}[basis]}，目标 {target:.0%}；请确认与品牌考核规则一致。", "info")
+    issues.add("PLAN_BASIS_ASSUMPTION", "计划按单品独立考核", f"当前口径：{ {'orders_amount':'报单金额', 'outbound_amount':'出库金额', 'orders_quantity':'报单小单位数量', 'outbound_quantity':'出库小单位数量', 'sales_quantity':'平台销售数量'}[basis]}，目标 {target:.0%}；逐款计算达标和缺口，超额商品不抵扣其他商品的任务。", "info")
     if not options.get("inventoryComparable"):
         issues.add("INVENTORY_POOL_UNCONFIRMED", "库存与销量是否同一库存池待确认", "库存数量正常展示；可售天数暂留空。确认仓库库存与销量可比较后，可在配置中开启计算。", "info")
     if any(s["role"] == "inventory" for s in sources):
@@ -641,6 +676,7 @@ def analyze_workbook(path, config):
 
     products = []
     trend = defaultdict(lambda: {"sales": None, "orders": None, "outbound": None})
+    remaining = max(0, (month_end - cutoff).days)
     required_sales_days = {cutoff - timedelta(days=i) for i in range(1, average_days + 1)}
     for pid, item in meta.items():
         records = {role: role_data.get(role, {}).get(pid, {}) for role in ("sales", "outbound", "orders", "transit", "loss")}
@@ -691,9 +727,7 @@ def analyze_workbook(path, config):
                         p["sources"]["stockAmount"] = "手动调整库存数量 × 基准小单位价格"
             issues.add("MANUAL_OVERRIDE", "使用人工调整", f"商品 {pid} 的{FIELD_LABELS.get(field, field)}采用人工输入 {number:g}，原文件保持不变。", "info", cell=field, product=pid)
         p["achievement"] = _ratio(p["completed"], p["plan"])
-        p["targetGap"] = max(0., p["plan"] * target - p["completed"]) if p["plan"] is not None and p["completed"] is not None else None
-        remaining = max(0, (month_end - cutoff).days)
-        p["dailyRequired"] = p["targetGap"] / remaining if p["targetGap"] is not None and remaining > 0 else (0. if p["targetGap"] == 0 else None)
+        p.update(_plan_assessment(p["plan"], p["completed"], target, remaining))
         p["discountRate"] = _ratio(p["supplyAmount"], p["outboundAmount"])
         p["markdownRate"] = 1 - p["discountRate"] if p["discountRate"] is not None else None
         p["lossRate"] = _ratio(p["lossAmount"], p["outboundAmount"])
@@ -714,8 +748,16 @@ def analyze_workbook(path, config):
         p["issues"] = own
         p["status"] = "error" if any(i["severity"] == "error" for i in own) else "warning" if any(i["severity"] == "warning" for i in own) else "normal"
     summary = {key: _sum(p[key] for p in products) for key in ("plan", "completed", "stockAmount", "transitAmount", "outboundAmount", "supplyAmount", "lossAmount", "salesQuantity")}
+    known_gap = _sum(p["targetGap"] for p in products)
+    unknown_count = sum(p["assessmentStatus"] == "unknown" for p in products)
+    known_daily = known_gap / remaining if known_gap is not None and remaining else (0. if known_gap == 0 else None)
     summary.update({"achievement": _ratio(summary["completed"], summary["plan"]), "targetRate": target,
-                    "targetGap": max(0., summary["plan"] * target - summary["completed"]) if summary["plan"] is not None and summary["completed"] is not None else None,
+                    "assessmentScope": "product", "assessmentVersion": 1, "remainingDays": remaining,
+                    "metCount": sum(p["assessmentStatus"] == "met" for p in products),
+                    "belowTargetCount": sum(p["assessmentStatus"] == "below" for p in products),
+                    "unknownTargetCount": unknown_count,
+                    "knownTargetGap": known_gap, "targetGap": None if unknown_count else known_gap,
+                    "knownDailyRequired": known_daily, "dailyRequired": None if unknown_count else known_daily,
                     "discountRate": _ratio(summary["supplyAmount"], summary["outboundAmount"]), "lossRate": _ratio(summary["lossAmount"], summary["outboundAmount"]),
                     "productCount": len(products), "issueCount": len(issues.items),
                     "partialMetrics": [key for key in ("plan", "completed", "stockAmount", "outboundAmount", "lossAmount") if any(p[key] is None for p in products)]})

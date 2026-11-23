@@ -188,6 +188,8 @@ class ExportService:
         config = result.get("config") or {}
         basis = config.get("planBasis", "orders_amount")
         money = basis.endswith("amount")
+        individual = summary.get("assessmentScope") == "product" and summary.get("assessmentVersion") == 1
+        unit = "元" if money else "小单位"
         self._append(overview, ["指标", "值", "单位或说明"])
         overview_rows = [
             ("源文件", result.get("filename"), "原文件保持不变"),
@@ -196,14 +198,15 @@ class ExportService:
             ("分析生成时间", result.get("generatedAt"), "来源快照时间"),
             ("统计月份", result.get("period"), ""), ("截止日期", result.get("asOf"), "库存使用导入快照"),
             ("应用版本", result.get("appVersion") or self.app_version, ""),
-            ("计划口径", self.BASIS.get(basis, str(basis)), "确认业务定义后使用"),
+            ("计划口径", self.BASIS.get(basis, str(basis)), "完成额采用当次保存配置"),
+            ("考核范围", "逐个商品独立考核" if individual else "历史记录口径", "超额商品不能抵扣其他商品缺口" if individual else "未记录单品考核版本，保留保存时的数值，重新分析可生成新口径记录"),
             ("金额模式", "明细重算" if config.get("amountMode") == "calculated" else "源金额优先", "跨期金额可按有效明细重算，详见数据问题"),
             ("商品数", summary.get("productCount", len(result["products"])), "款"),
             ("月计划", summary.get("plan"), "元" if money else "小单位"),
             ("累计完成", summary.get("completed"), "元" if money else "小单位"),
-            ("达成率", summary.get("achievement"), "累计完成 ÷ 月计划"),
+            ("合计完成比例" if individual else "达成率", summary.get("achievement"), "累计完成 ÷ 月计划；不代表每个商品达标" if individual else "累计完成 ÷ 月计划"),
             ("目标门槛", summary.get("targetRate", config.get("targetRate")), "按当前配置"),
-            ("距目标差额", summary.get("targetGap"), "元" if money else "小单位"),
+            ("逐款缺口合计" if individual else "距目标差额", summary.get("targetGap"), unit + ("；逐款正差额相加，资料不全时留空" if individual else "；历史保存值")),
             ("现货金额", summary.get("stockAmount"), "元；现货与在途分开"),
             ("在途金额", summary.get("transitAmount"), "元；未计入现货"),
             ("出库金额", summary.get("outboundAmount"), "元；到岸价口径"),
@@ -219,12 +222,28 @@ class ExportService:
                 for key in summary.get("partialMetrics") or []), "仅包含已提供数据，必要比率可能留空"),
             ("空白值说明", "缺失或无法计算的指标保留空白", "空白不等于真实0"),
         ]
+        if individual:
+            task_note = "截止日后本月剩余自然日；按全部商品缺口合计计算"
+            if summary.get("remainingDays") == 0 and summary.get("belowTargetCount", 0):
+                task_note = "本期已到期，仍有未达标商品；不把未完成任务显示为0"
+            elif summary.get("unknownTargetCount", 0):
+                task_note = "仍有待核对商品；完整每日任务保留空白"
+            insertion = next(i for i, row in enumerate(overview_rows) if row[0] == "现货金额")
+            overview_rows[insertion:insertion] = [
+                ("已达标商品", summary.get("metCount"), "款"),
+                ("未达标商品", summary.get("belowTargetCount"), "款"),
+                ("待核对商品", summary.get("unknownTargetCount"), "款；缺计划、完成数据或计划非正数"),
+                ("已知商品缺口", summary.get("knownTargetGap"), unit + "；只包括资料完整的商品"),
+                ("剩余自然日", summary.get("remainingDays"), "天；截止日之后至月末"),
+                ("剩余每日需完成", summary.get("dailyRequired"), unit + "；" + task_note),
+                ("已知商品每日需完成", summary.get("knownDailyRequired"), unit + "；只包含可评价商品，存在待核对商品时不是完整任务"),
+            ]
         for label, value, note in overview_rows:
             self._append(overview, [label, value, note])
             cell = overview.cell(overview.max_row, 2)
-            if label in {"达成率", "目标门槛", "折扣比例", "折价幅度", "货损率"}:
+            if label in {"达成率", "合计完成比例", "目标门槛", "折扣比例", "折价幅度", "货损率"}:
                 cell.number_format = "0.00%"
-            elif isinstance(value, (int, float)) and label not in {"商品数", "数据问题数"}:
+            elif isinstance(value, (int, float)) and label not in {"商品数", "数据问题数", "已达标商品", "未达标商品", "待核对商品", "剩余自然日"}:
                 cell.number_format = "#,##0.00"
         self._style_sheet(overview, [23, 40, 68], "OverviewMetrics")
 
@@ -236,6 +255,12 @@ class ExportService:
             ("supplyAmount", "出库供价金额", 20), ("discountRate", "折扣比例", 14), ("markdownRate", "折价幅度", 14),
             ("lossQuantity", "货损数量", 16), ("lossAmount", "货损金额", 16), ("lossRate", "货损率", 14), ("status", "数据状态", 18),
         ]
+        if individual:
+            fields[7:7] = [("targetAmount", "考核目标完成额" if money else "考核目标数量", 20),
+                           ("assessmentStatus", "单品考核", 16), ("assessmentReason", "考核说明", 42)]
+            insertion = next(i for i, field in enumerate(fields) if field[0] == "dailyRequired") + 1
+            fields[insertion:insertion] = [
+                ("remainingDays", "剩余自然日", 16), ("taskStatus", "每日任务说明", 28)]
         inventory_fields = [
             ("id", "商品标识", 22), ("name", "商品名称", 26), ("code", "商品编码", 24), ("warehouse", "仓库或渠道", 20),
             ("pack", "箱规或换算率", 18), ("stockLarge", "现货大单位", 17), ("stockSmall", "现货小单位", 17),
@@ -254,6 +279,12 @@ class ExportService:
                         value = self._text_id(value)
                     elif key == "status":
                         value = {"normal": "无单品提醒", "warning": "需核对", "error": "数据异常", "info": "口径提示"}.get(value, value)
+                    elif key == "assessmentStatus":
+                        value = {"met": "已达标", "below": "未达标", "unknown": "待核对"}.get(value, "待核对")
+                    elif key == "taskStatus":
+                        value = ("待核对资料" if item.get("assessmentStatus") == "unknown" else
+                                 "已达标，无新增任务" if item.get("assessmentStatus") == "met" else
+                                 "本期已到期，仍未达标" if item.get("remainingDays") == 0 else "按剩余自然日跟进")
                     values.append(value)
                 self._append(sheet, values)
                 for col, (key, _, _) in enumerate(definitions, 1):

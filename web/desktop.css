@@ -1,0 +1,10 @@
+/* Only the native desktop bridge inserts these controls. */
+.rl-desktop-path-control{display:flex;align-items:stretch;gap:8px;min-width:0;width:100%}
+.rl-desktop-path-control>input{flex:1;min-width:0;width:0;max-width:100%}
+.rl-desktop-path-button{display:inline-flex;align-items:center;justify-content:center;flex:none;min-width:62px;min-height:36px;padding:8px 13px;border:1px solid var(--line-strong,var(--line));border-radius:8px;background:var(--surface-subtle,var(--paper));color:var(--text-secondary,var(--ink));font:500 calc(12px * var(--ui-scale,1))/1.5 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;white-space:nowrap;cursor:pointer}
+.rl-desktop-path-button:hover{border-color:var(--purple);color:var(--purple);background:var(--purple-soft)}
+.rl-desktop-path-button:focus-visible{outline:2px solid var(--focus-ring,var(--purple));outline-offset:3px}
+.rl-desktop-path-button:disabled{opacity:.65;cursor:wait}
+.rl-desktop-path-status,.field .rl-desktop-path-status{display:block;margin-top:3px;color:var(--red);font-size:calc(11px * var(--ui-scale,1));line-height:1.65;overflow-wrap:anywhere}
+.rl-desktop-path-status[hidden]{display:none!important}
+@media(max-width:640px){.rl-desktop-path-control{gap:6px}.rl-desktop-path-button{min-width:54px;padding:8px 10px;font-size:calc(11px * var(--ui-scale,1))}}

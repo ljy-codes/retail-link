@@ -1,0 +1,7 @@
+{
+  "featureLevel": "desktop-1",
+  "macVersion": "0.1.5",
+  "windowsVersion": "0.1.6",
+  "minimumMacOS": "13.0",
+  "features": ["reviewed_import", "format_baselines", "dashboard", "daily_prices_sales", "history_restore", "safe_excel_export", "data_migration", "audit_log", "appearance", "native_file_dialogs", "persistent_preferences", "offline_runtime", "managed_backend_lifecycle"]
+}

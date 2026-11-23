@@ -94,7 +94,7 @@
         else if(action==='choose-file')fileInput.click();
         else if(action==='preview')await previewImport();
         else if(action==='commit')await commitImport();
-        else if(action==='save-mapping'){captureImport();localStorage.setItem('operator-daily-mapping-v1',JSON.stringify(state.importData.mapping));notify('价格表映射已保存；其他文件可手动载入。');}
+        else if(action==='save-mapping'){captureImport();localStorage.setItem('operator-daily-mapping-v1',JSON.stringify(state.importData.mapping));window.dispatchEvent(new CustomEvent('retail-link-preferences-change'));notify('价格表映射已保存；其他文件可手动载入。');}
         else if(action==='load-mapping'){const saved=JSON.parse(localStorage.getItem('operator-daily-mapping-v1')||'null');if(!saved)throw new Error('还没有保存价格表映射。');captureImport();if(!state.importData.sheets.some(sheet=>sheet.name===saved.sheet))saved.sheet=state.importData.mapping.sheet;state.importData.mapping=saved;state.preview=null;render();notify('已载入映射，请核对工作表与业务日期后预览。');}
       }catch(error){notify(error.message,true);}
     });

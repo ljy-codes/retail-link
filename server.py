@@ -13,6 +13,8 @@ import re
 import sys
 import secrets
 sys.dont_write_bytecode = True
+import signal
+import tempfile
 import threading
 import time
 import traceback
@@ -29,7 +31,34 @@ WEB_DIR = APP_DIR / "web"
 DATA_DIR = PROJECT_DIR / "本地数据"
 ORIGINAL_DIR = PROJECT_DIR / "examples"
 SAMPLE = ORIGINAL_DIR / "样例.xlsx"
-VERSION = "0.1.3"
+EXPORT_DIR = None
+DESKTOP_MODE = False
+
+
+def platform_name():
+    return "mac" if sys.platform == "darwin" else "windows" if sys.platform == "win32" else "linux"
+
+
+def application_metadata():
+    """The packaged app supplies its own platform release metadata."""
+    metadata = {"version": "0.1.5", "platform": platform_name(), "featureLevel": "desktop-1"}
+    source = APP_DIR / "版本.json"
+    if source.is_file():
+        saved = json.loads(source.read_text(encoding="utf-8"))
+        if not isinstance(saved, dict):
+            raise ValueError("应用版本信息格式无效。")
+        for key in metadata:
+            if key in saved:
+                if not isinstance(saved[key], str) or not saved[key] or len(saved[key]) > 80:
+                    raise ValueError("应用版本信息格式无效。")
+                metadata[key] = saved[key]
+    return metadata
+
+
+APP_METADATA = application_metadata()
+VERSION = APP_METADATA["version"]
+PLATFORM = APP_METADATA["platform"]
+FEATURE_LEVEL = APP_METADATA["featureLevel"]
 MAX_UPLOAD = 30 * 1024 * 1024
 MAX_BODY = (MAX_UPLOAD * 4 // 3) + 1024 * 1024
 WORKBOOKS: dict[str, dict] = {}
@@ -42,6 +71,113 @@ IO_LOCK = threading.RLock()
 EXPORT_PREVIEWS = {}
 MIGRATION_SERVICES = {}
 DATASET_SERVICES = {}
+
+
+def export_directory():
+    return (EXPORT_DIR if EXPORT_DIR is not None else PROJECT_DIR / "生成文件").expanduser().resolve()
+
+
+def desktop_directories(home=None, platform=None, environ=None):
+    """Writable user locations remain independent of read-only app resources."""
+    user_home = Path(home) if home is not None else Path.home()
+    host_platform = platform or platform_name()
+    environment = os.environ if environ is None else environ
+    if host_platform == "mac":
+        data = user_home / "Library" / "Application Support" / "零售通"
+    elif host_platform == "windows":
+        data = Path(environment.get("LOCALAPPDATA") or user_home / "AppData" / "Local") / "零售通"
+    else:
+        data = user_home / ".local" / "share" / "零售通"
+    return {"data": data, "original": data / "原始资料",
+            "export": user_home / "Documents" / "零售通" / "生成文件"}
+
+
+def resource_directory():
+    if DESKTOP_MODE:
+        bundle = next((parent for parent in (APP_DIR, *APP_DIR.parents) if parent.suffix.lower() == ".app"), None)
+        if bundle is not None:
+            return bundle.resolve()
+    return APP_DIR.resolve()
+
+
+def validate_export_target(path):
+    if not path:
+        raise ValueError("请指定生成文件的完整路径。")
+    target = Path(path).expanduser()
+    if target.is_symlink():
+        raise ValueError("目标不能是符号链接。")
+    target = target.resolve()
+    protected_app = target.is_relative_to(resource_directory())
+    # A flattened browser checkout keeps default exports beside server.py.
+    # A desktop bundle has no writable exception inside its resources.
+    if not DESKTOP_MODE and target.is_relative_to(export_directory()):
+        protected_app = False
+    if target.is_relative_to(ORIGINAL_DIR.resolve()) or target.is_relative_to(DATA_DIR.resolve()) or protected_app:
+        raise ValueError("请选择独立的生成文件目录，避免覆盖原始资料或应用数据。")
+    if any(target == entry["path"] for entry in WORKBOOKS.values()):
+        raise ValueError("不能覆盖已导入的源工作簿。")
+    return target
+
+
+def configure_runtime(args):
+    global DATA_DIR, ORIGINAL_DIR, SAMPLE, EXPORT_DIR, DESKTOP_MODE
+    DESKTOP_MODE = bool(args.desktop)
+    defaults = desktop_directories() if DESKTOP_MODE else {
+        "data": PROJECT_DIR / "本地数据", "original": PROJECT_DIR / "原始资料", "export": PROJECT_DIR / "生成文件"}
+    DATA_DIR = (args.data_dir or defaults["data"]).expanduser().resolve()
+    ORIGINAL_DIR = (args.original_dir or (DATA_DIR / "原始资料" if DESKTOP_MODE else defaults["original"])).expanduser().resolve()
+    EXPORT_DIR = (args.export_dir or defaults["export"]).expanduser().resolve()
+    SAMPLE = ORIGINAL_DIR / "样例.xlsx"
+    if DESKTOP_MODE:
+        protected = resource_directory()
+        locations = [DATA_DIR, ORIGINAL_DIR, EXPORT_DIR]
+        if args.ready_file:
+            locations.append(args.ready_file.expanduser().resolve())
+        if any(path.is_relative_to(protected) for path in locations):
+            raise ValueError("桌面应用的运行数据、导出和就绪文件必须位于应用包之外。")
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    ORIGINAL_DIR.mkdir(parents=True, exist_ok=True)
+    EXPORT_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def write_ready_file(path, payload):
+    path = path.expanduser().resolve()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, name = tempfile.mkstemp(prefix=".retail-ready-", suffix=".json", dir=path.parent)
+    pending = Path(name)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+            json.dump(payload, stream, ensure_ascii=False, allow_nan=False)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(pending, path)
+    finally:
+        pending.unlink(missing_ok=True)
+
+
+def remove_ready_file(path, payload):
+    if path is None or payload is None:
+        return
+    try:
+        # Another app instance may have replaced the same ready path.
+        if json.loads(path.read_text(encoding="utf-8")) == payload:
+            path.unlink()
+    except (OSError, ValueError):
+        pass
+
+
+def watch_parent_stdin(server):
+    """The native host owns the pipe's write end; EOF means its process ended."""
+    def wait_for_eof():
+        try:
+            while sys.stdin.buffer.read(1):
+                pass
+        except (OSError, ValueError):
+            pass
+        # shutdown() waits for the serving loop and must run off its thread.
+        server.shutdown()
+    watcher = threading.Thread(target=wait_for_eof, name="retail-parent-pipe", daemon=True)
+    watcher.start()
 
 
 def dataset_service():
@@ -79,15 +215,8 @@ def preview_export(body):
     if not directory.is_dir():
         raise ValueError("目标目录不存在，请选择一个现有目录。")
     target = directory / ExportService._safe_filename(body.get("filename"))
-    if target.is_symlink():
-        raise ValueError("目标不能是符号链接。")
     # Generated outputs cannot overwrite any known input or managed runtime file.
-    protected_app = target.is_relative_to(APP_DIR.resolve()) and not target.is_relative_to((PROJECT_DIR / "生成文件").resolve())
-    if target.is_relative_to(ORIGINAL_DIR.resolve()) or target.is_relative_to(DATA_DIR.resolve()) or protected_app:
-        raise ValueError("请选择独立的生成文件目录，避免覆盖原始资料或应用数据。")
-    for entry in WORKBOOKS.values():
-        if target == entry["path"]:
-            raise ValueError("不能覆盖已导入的源工作簿。")
+    target = validate_export_target(target)
     before = hashlib.sha256(target.read_bytes()).hexdigest() if target.is_file() else None
     token = secrets.token_urlsafe(24)
     now = time.monotonic()
@@ -277,9 +406,10 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if parsed.path == "/api/health":
                 return self.send_json({"app": "零售通", "version": VERSION,
+                                       "desktop": DESKTOP_MODE, "platform": PLATFORM, "featureLevel": FEATURE_LEVEL,
                                        "sampleAvailable": SAMPLE.is_file(),
                                        "defaultDirectory": str(ORIGINAL_DIR),
-                                       "defaultExportDirectory": str(PROJECT_DIR / "生成文件"),
+                                       "defaultExportDirectory": str(export_directory()),
                                        "capabilities": ["excel", "directory", "manual", "mapping", "history", "local_export", "migration", "multi_import", "format_review"]})
             if parsed.path == "/api/import/templates":
                 return self.send_json({"templates": dataset_service().templates()})
@@ -421,11 +551,11 @@ class Handler(BaseHTTPRequestHandler):
                     raise ValueError("请确认恢复覆盖前版本。")
                 return self.send_json(export_service().rollback(str(body.get("operationId", ""))))
             if route == "/api/export/logs":
-                return self.send_json(export_service().export_logs(body.get("path")))
+                return self.send_json(export_service().export_logs(validate_export_target(body.get("path"))))
             if route == "/api/preferences":
                 return self.send_json(migration_service().save_preferences(body.get("preferences")))
             if route == "/api/data/bundle":
-                return self.send_json(migration_service().export_bundle(body.get("path")))
+                return self.send_json(migration_service().export_bundle(validate_export_target(body.get("path"))))
             if route == "/api/data/preview":
                 return self.send_json(migration_service().preview_import(body.get("path")))
             if route == "/api/data/import":
@@ -552,27 +682,31 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"error": f"删除失败：{exc}"}, 500)
 
 
-def main():
-    global DATA_DIR, ORIGINAL_DIR, SAMPLE
+def main(argv=None):
     parser = argparse.ArgumentParser(description="零售通 · 电商看盘")
     parser.add_argument("--port", type=int, default=8876)
     parser.add_argument("--open", action="store_true", help="启动后打开浏览器")
     parser.add_argument("--data-dir", type=Path, help="指定本地分析记录目录")
     parser.add_argument("--original-dir", type=Path, help="指定原始资料目录")
-    args = parser.parse_args()
-    if args.data_dir:
-        DATA_DIR = args.data_dir.expanduser().resolve()
-    if args.original_dir:
-        ORIGINAL_DIR = args.original_dir.expanduser().resolve()
-        SAMPLE = ORIGINAL_DIR / "样例.xlsx"
-    (PROJECT_DIR / "生成文件").mkdir(exist_ok=True)
+    parser.add_argument("--desktop", action="store_true", help="使用独立于应用包的桌面用户数据目录")
+    parser.add_argument("--export-dir", type=Path, help="指定默认生成文件目录")
+    parser.add_argument("--ready-file", type=Path, help="监听成功后原子写入本机服务就绪信息")
+    parser.add_argument("--parent-stdin", action="store_true", help="桌面宿主的标准输入管道关闭后停止服务")
+    args = parser.parse_args(argv)
+    if not 0 <= args.port <= 65535:
+        parser.error("端口必须为0—65535；0表示由系统分配空闲端口。")
+    try:
+        configure_runtime(args)
+    except (OSError, ValueError) as exc:
+        print(f"运行目录无法准备：{exc}", file=sys.stderr)
+        return 1
     try:
         import openpyxl  # noqa: F401
     except ImportError:
         print("缺少 openpyxl，请使用启动脚本或安装 requirements.txt。", file=sys.stderr)
         return 1
     server = None
-    for port in range(args.port, args.port + 10):
+    for port in ([0] if args.port == 0 else range(args.port, min(args.port + 10, 65536))):
         try:
             server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
             break
@@ -583,14 +717,35 @@ def main():
         return 1
     url = f"http://127.0.0.1:{server.server_port}"
     print(f"\n零售通 v{VERSION}\n{url}\n关闭终端或按 Ctrl+C 停止服务。\n", flush=True)
-    if args.open:
+    if args.open and not DESKTOP_MODE:
         threading.Timer(0.5, lambda: webbrowser.open(url)).start()
+    ready_path = args.ready_file.expanduser().resolve() if args.ready_file else None
+    ready_payload = None
+    previous_signals = {}
+    def stop_service(signum, frame):
+        raise KeyboardInterrupt
     try:
+        # SIGTERM is the normal native-app shutdown path. Raise out of the
+        # serving loop; calling shutdown() on this same thread would deadlock.
+        if threading.current_thread() is threading.main_thread():
+            for signum in (signal.SIGINT, signal.SIGTERM):
+                previous_signals[signum] = signal.signal(signum, stop_service)
+        if ready_path is not None:
+            ready_payload = {"url": url, "version": VERSION, "pid": os.getpid()}
+            write_ready_file(ready_path, ready_payload)
+        if DESKTOP_MODE and args.parent_stdin:
+            watch_parent_stdin(server)
         server.serve_forever()
     except KeyboardInterrupt:
         print("\n服务已停止。")
+    except (OSError, ValueError) as exc:
+        print(f"本地服务无法启动：{exc}", file=sys.stderr)
+        return 1
     finally:
         server.server_close()
+        remove_ready_file(ready_path, ready_payload)
+        for signum, handler in previous_signals.items():
+            signal.signal(signum, handler)
     return 0
 
 

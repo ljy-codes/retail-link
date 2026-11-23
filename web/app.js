@@ -266,7 +266,7 @@ async function applyConfig(){
  catch(error){toast(error.message,true);}
 }
 function saveProfile(){
- try{captureConfig();validateConfig(state.configDraft);const name=$('#profile-name')?.value.trim();if(!name){toast('请填写配置名称。',true);$('#profile-name')?.focus();return;}const config=clone(state.configDraft);delete config.overrides;const existing=profiles.findIndex(profile=>profile.name===name);const item={name,config,savedAt:new Date().toISOString()};if(existing>=0)profiles[existing]=item;else profiles.unshift(item);profiles=profiles.slice(0,12);localStorage.setItem(storageKey,JSON.stringify(profiles));renderConfig();toast(`已保存配置“${name}”。`);}
+ try{captureConfig();validateConfig(state.configDraft);const name=$('#profile-name')?.value.trim();if(!name){toast('请填写配置名称。',true);$('#profile-name')?.focus();return;}const config=clone(state.configDraft);delete config.overrides;const existing=profiles.findIndex(profile=>profile.name===name);const item={name,config,savedAt:new Date().toISOString()};if(existing>=0)profiles[existing]=item;else profiles.unshift(item);profiles=profiles.slice(0,12);localStorage.setItem(storageKey,JSON.stringify(profiles));queueDesktopPreferences();renderConfig();toast(`已保存配置“${name}”。`);}
  catch(error){toast(error.message||'配置保存失败，请检查浏览器存储。',true);}
 }
 function loadProfile(){
@@ -349,6 +349,14 @@ function applyImportedPreferences(preferences){
  localStorage.setItem('operator-daily-mapping-v1',JSON.stringify(preferences.dailyMapping||{}));
  window.OperatorAppearance?.applyPreferences(preferences.appearance||{});
 }
+let desktopPreferencesReady=false,desktopSaveTimer=null;
+function queueDesktopPreferences(){
+ if(!desktopPreferencesReady)return;
+ clearTimeout(desktopSaveTimer);
+ desktopSaveTimer=setTimeout(()=>api('/api/preferences',{preferences:collectPreferences()}).catch(error=>toast('设置尚未保存：'+error.message,true)),180);
+}
+window.addEventListener('operator-appearance-change',queueDesktopPreferences);
+window.addEventListener('retail-link-preferences-change',queueDesktopPreferences);
 let migrationPreview=null;
 function openDataTools(){
  migrationPreview=null;
@@ -437,7 +445,12 @@ document.addEventListener('dragleave',event=>{event.preventDefault();dragDepth--
 document.addEventListener('drop',event=>{event.preventDefault();dragDepth=0;$('#drag-overlay').hidden=true;if(state.busy)return;const files=[...(event.dataTransfer?.files||[])];const file=files.find(file=>/\.(xlsx|xlsm)$/i.test(file.name));if(file){closeModal();window.RetailLinkDataset.openFiles(files.filter(file=>/\.(xlsx|xlsm)$/i.test(file.name))).catch(error=>toast(error.message,true));}else if(files.length)toast('请拖入 .xlsx 或 .xlsm 工作簿。',true);});
 
 render();
-api('/api/health').then(data=>{state.sampleAvailable=data.sampleAvailable!==false;state.defaultDirectory=data.defaultDirectory||'';state.defaultExportDirectory=data.defaultExportDirectory||'';if(!state.result)render();}).catch(()=>toast('暂时无法连接本地服务，请检查启动窗口是否仍在运行。',true));
+api('/api/health').then(async data=>{
+ state.sampleAvailable=data.sampleAvailable!==false;state.defaultDirectory=data.defaultDirectory||'';state.defaultExportDirectory=data.defaultExportDirectory||'';
+ const versionLabel=document.querySelector('#app-version');if(versionLabel)versionLabel.textContent='v'+data.version;
+ if(data.desktop){const stored=await api('/api/preferences');applyImportedPreferences(stored.preferences);desktopPreferencesReady=true;}
+ if(!state.result)render();
+}).catch(()=>toast('暂时无法连接本地服务，请重新启动零售通。',true));
 
 
 window.RetailLinkImport = {

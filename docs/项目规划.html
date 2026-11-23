@@ -31,8 +31,8 @@
       </div>
       <aside class="status-card" aria-label="版本状态">
         <div class="label">当前版本状态</div>
-        <div class="status"><span class="dot" aria-hidden="true"></span><span id="release-status">v0.1.3 组合输入与格式确认原型</span></div>
-        <div class="date">规划更新：2026-11-22 · Asia/Shanghai</div>
+        <div class="status"><span class="dot" aria-hidden="true"></span><span id="release-status">v0.1.5 Mac App试用版</span></div>
+        <div class="date">规划更新：2026-11-23 · Asia/Shanghai</div>
       </aside>
     </div>
   </div>
@@ -84,7 +84,7 @@
       </section>
 
       <section class="section" id="scope">
-        <div class="section-head"><div><div class="section-kicker">02 · 当前版本</div><h2>v0.1.3：多文件核对后生成看盘</h2></div><span class="pill">已实现 · 已验证</span></div>
+        <div class="section-head"><div><div class="section-kicker">02 · 当前版本</div><h2>v0.1.5：独立Mac App与本地看盘</h2></div><span class="pill">已实现 · 已验证</span></div>
         <p>用户明确先做 <strong>库存与销量计算、每日经营表</strong>。本版围绕这两个结果构建文件导入、映射配置、异常提示和手工修正。</p>
         <div class="table-wrap"><table><thead><tr><th style="width:20%">能力</th><th>当前具体范围</th><th style="width:15%">状态</th></tr></thead><tbody>
           <tr><td>文件入口</td><td>选择或拖入 <code>.xlsx</code>、<code>.xlsm</code>；提供现有样例入口；输入本机目录路径，扫描后勾选1—8份文件，逐表确认角色或忽略，预览后分析。</td><td><span class="pill">已实现</span></td></tr>
@@ -113,7 +113,7 @@
       <section class="section" id="connectivity">
         <div class="section-head"><div><div class="section-kicker">数据接入原则 · 用户新增目标</div><h2>本地完全离线，线上可连接也可手动下载</h2></div><span class="pill">长期目标已确认</span></div>
         <div class="table-wrap"><table><thead><tr><th>数据类型</th><th>目标流程与具体实现</th><th>当前状态</th></tr></thead><tbody>
-          <tr><td>无需线上数据</td><td>文件导入、字段映射、标准化、计算、问题定位、手工修正和结果导出均在本机完成。运行时不依赖外部接口、CDN 或云端分析。</td><td>当前本机处理已实现；独立环境首次准备依赖可能联网，完整离线安装包后续完善。</td></tr>
+          <tr><td>无需线上数据</td><td>文件导入、字段映射、标准化、计算、问题定位、手工修正和结果导出均在本机完成。运行时不依赖外部接口、CDN 或云端分析。</td><td>Mac安装包内置运行环境，可离线运行；开发启动脚本首次准备依赖仍可能联网。</td></tr>
           <tr><td>线上链接接入</td><td>用户配置链接及访问所必需的登录／认证信息，工具按已配置数据源读取，随后进入同一套标准化、校验和分析流程。可设计连接测试、更新频率与失败重试。</td><td>后续数据连接阶段；当前未实现 URL 读取、自动登录或认证信息保存。</td></tr>
           <tr><td>线上人工下载</td><td>用户自行登录线上平台、下载文件，再拖入工具或放到指定目录；从读取文件到分析、校验、手动处理和结果查看均可在本地完成。</td><td>当前文件选择、拖拽及目录扫描可承接已下载文件；仍需按实际原始导出格式配置映射。</td></tr>
         </tbody></table></div>
@@ -170,7 +170,7 @@
           <div class="arch-connect">文件读取与分析请求 ↓　↑ 结构化结果与来源</div>
           <div class="arch-row"><div class="arch-box main"><strong>Python 本地 HTTP 服务</strong><span>仅监听 127.0.0.1；文件会话、目录扫描、格式检查与分析记录</span></div></div>
           <div class="arch-connect">按映射读取 → 统一商品与单位 → 按日期筛选 → 计算与校验</div>
-          <div class="arch-row"><div class="arch-box"><strong>openpyxl 分析引擎</strong><span>只读解析工作簿；独立计算指标；返回缺失、异常与来源</span></div><div class="arch-box"><strong>本地配置与历史存储</strong><span>复用配置与文件人工调整分开；完整 JSON 快照与可恢复删除，本轮集成中</span></div></div>
+          <div class="arch-row"><div class="arch-box"><strong>openpyxl 分析引擎</strong><span>只读解析工作簿；独立计算指标；返回缺失、异常与来源</span></div><div class="arch-box"><strong>本地配置与历史存储</strong><span>复用配置与文件人工调整分开；完整 JSON 快照与可恢复删除，已实现</span></div></div>
         </div>
         <div class="details-grid">
           <div><h3>数据与映射规则</h3><ul class="clean-list"><li>按角色连接月计划、商品规格、编码对照、库存、销量、出库、报单、在途和货损；工作表名称与列字母可以调整。</li><li>商品以稳定标识关联；编码按标识符保留，简称与编码冲突明确提示，不凭不同表的相同行号关联商品。</li><li>保留大单位、箱规及小单位的区别；数量比较须采用一致单位，金额须采用匹配的单价。</li><li>辅助汇总区按商品键关联；日期明细按统计月份和截止日期筛选，源整月金额不得直接替代不匹配的部分期间。</li></ul></div>
@@ -216,9 +216,9 @@
           <tr><td>撤销与还原</td><td>重要操作采用可撤销或版本快照；删除使用可恢复回收站，配置和人工修正保留历史，后续扩展批量操作撤销。</td><td><span class="pill">已有快照／恢复</span></td></tr>
           <tr><td>生成内容下载</td><td>当前支持多工作表 Excel 保存与下载，保留 CSV。筛选导出会标明明细范围和总览口径；源文件不改写。</td><td><span class="pill">部分已实现</span></td></tr>
           <tr><td>轻量持久化</td><td>分析快照使用本地 JSON，日售价和销量使用 SQLite，操作日志使用轻量本地文件；禁止引入 MySQL 等重型数据库。历史可查询、删除和恢复。</td><td><span class="pill">当前已实现</span></td></tr>
-          <tr><td>安装与卸载</td><td>后续 Mac／Windows 应用提供简洁安装进度。普通卸载只移除应用，保留配置、日志和本地数据；彻底卸载移除应用相关数据，但绝不删除用户源文件和生成文件。</td><td><span class="pill future">桌面版后续</span></td></tr>
+          <tr><td>安装与卸载</td><td>Mac提供DMG拖入应用程序，复制进度由系统显示。原生菜单区分普通与彻底卸载，二次确认后移入废纸篓；用户源文件、导入副本与生成文件保留。Windows需在Windows环境实现同等能力。</td><td><span class="pill">Mac已实现；卸载实机验收待做</span></td></tr>
         </tbody></table></div>
-        <div class="callout amber">当前仍是本地启动版。等客户确认方向可行后，再制作 Mac／Windows 应用；GitHub 发布也放在客户确认之后，仓库不携带客户源文件、本地数据、日志或凭据。</div>
+        <div class="callout amber">已按后续授权开始App开发并持续同步GitHub。Mac奇数版本带头开发与覆盖测试，Windows偶数版本在Windows系统跟随适配，共享同一业务代码和功能清单。仓库不携带安装包、客户原表、运行数据、日志或凭据。</div>
       </section>
 
       <section class="section" id="local-files">
@@ -245,6 +245,8 @@
         </tbody></table></div>
       </section>
 
+      <section class="section" id="desktop-delivery"><div class="section-head"><div><div class="section-kicker">v0.1.5 · 2026-11-23</div><h2>产品交付只保留两个文件</h2></div><span class="pill">最新安装包 + 对应HTML说明</span></div><p>产品交付目录只保留“零售通-v0.1.5-mac-Intel.dmg”和“零售通-v0.1.5-使用说明.html”。源码、构建与系统适配在开发空间；虚构样本、日志、截图与测试在测试空间；原始资料与正式数据独立保留。升级不清用户数据。</p><p>当前验证包括内置运行环境独立性、只读中文路径、原生文件选择和CSV下载、跨端口配置恢复、正常退出与强退回收。Windows包、Apple Silicon原生验证、正式公证和完整实机安装/卸载矩阵仍待对应环境完成，不能标成当前已通过。</p></section>
+
       <section class="section" id="roadmap">
         <div class="section-head"><div><div class="section-kicker">05 · 阶段路线</div><h2>先把一次分析做可靠，再逐步减少人工操作</h2></div></div>
         <p>各阶段以完成验收为推进依据。以下是实现路线，不承诺固定日期，也不将未来能力算入当前交付。</p>
@@ -254,7 +256,7 @@
           <details class="phase"><summary><span class="phase-no">v0.3</span><span class="phase-title">受控的文件自动化</span><span class="pill future">后续</span></summary><div class="phase-body"><p>在固定输入规则后，增加可配置目录监听／定时扫描、变更检测、自动重算及失败提示。明确文件未写完、重复文件、缺失文件、异常数据的处理方法；保留暂停、手动重跑和结果追溯。只有无人值守验证通过后，才称为自动读取。</p><div class="scope"><span>目录监听</span><span>调度与重试</span><span>人工接管</span></div></div></details>
           <details class="phase"><summary><span class="phase-no">v0.4</span><span class="phase-title">URL 与其他数据来源接入</span><span class="pill future">后续评估</span></summary><div class="phase-body"><p>按实际数据源评估 URL 读取与正式接口。逐项明确访问方式、认证、更新频率、字段映射和失败恢复；沿用现有标准数据与分析接口。URL 接入不自动等同于平台登录、全站采集或后台自动操作。</p><div class="scope"><span>数据连接配置</span><span>来源适配</span><span>访问与失败恢复</span></div></div></details>
           <details class="phase"><summary><span class="phase-no">v1.x</span><span class="phase-title">形成多个独立工具共享数据的操控台</span><span class="pill future">长期方向</span></summary><div class="phase-body"><p>根据使用频率和实际收益，扩展到货、价格、活动、采购交接等已验证场景。共享商品、库存、销量和基础配置，保持各工具可以独立使用。自定义公式、到货核销、利润核算等，须先补齐规则与验证再单独立项。</p><div class="scope"><span>按场景扩展</span><span>共享基础数据</span><span>保留手工路径</span></div></div></details>
-          <details class="phase"><summary><span class="phase-no">桌面版</span><span class="phase-title">Mac、Windows 原生应用形态</span><span class="pill future">客户试用后推进</span></summary><div class="phase-body"><p>当前先保留本地启动台形式，验证客户日常导入、判断与调整流程。方向可行后，建设 Mac、Windows 桌面应用：复用统一UI组件和主题，将文件选择、本地数据、窗口管理、安装与启动体验接入桌面容器。具体采用 Tauri、Electron 或其他方案，在打包兼容性验证后确定；不把当前浏览器页面当作已完成客户端。</p><div class="scope"><span>Mac应用</span><span>Windows应用</span><span>本地数据迁移</span></div></div></details>
+          <details class="phase" open><summary><span class="phase-no">桌面版</span><span class="phase-title">Mac带头，Windows同功能跟随</span><span class="pill">Mac0.1.5已交付／Windows0.1.6待适配</span></summary><div class="phase-body"><p>Mac采用AppKit/WKWebView独立窗口，内置Python/openpyxl，程序资源只读，配置与历史独立持久化；支持原生对话框、下载、启动进度、单实例和退出/强退回收。当前已验证Intel Mac/macOS13+。Windows必须复用同一前后端、desktop-1功能清单与虚构样本验收，业务计算输出一致，仅替换系统交互层；安装包在Windows环境构建。</p><div class="scope"><span>Mac奇数／Windows偶数</span><span>Mac全功能覆盖先行</span><span>Windows同功能验收</span></div></div></details>
           <details class="phase"><summary><span class="phase-no">源码</span><span class="phase-title">客户确认方向可行后发布 GitHub</span><span class="pill future">有条件后续</span></summary><div class="phase-body"><p>客户认为方向可行后，再整理源码并上传 GitHub。提前区分代码、测试、交付包和本地业务数据；仓库不携带用户原始业务表、运行数据或登录凭据。GitHub已按用户后续授权推送至 ljy-codes/retail-link；源码与概览持续同步，原始业务表和运行数据不入库。</p></div></details>
         </div>
       </section>

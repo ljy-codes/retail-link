@@ -1,6 +1,7 @@
 {
   "name": "零售通",
-  "version": "0.1.2",
-  "module": "电商看盘",
-  "releaseDate": "2026-11-22"
+  "version": "0.1.5",
+  "featureLevel": "desktop-1",
+  "pairedWindowsVersion": "0.1.6",
+  "releaseDate": "2026-11-23"
 }

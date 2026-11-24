@@ -1,8 +1,7 @@
 {
-  "featureLevel": "desktop-3",
-  "macVersion": "0.1.9",
-  "windowsVersion": "0.1.10",
-  "pairedMacVersion": "0.1.9",
+  "featureLevel": "desktop-4",
+  "macVersion": "0.2.1",
+  "windowsVersion": "0.2.2",
   "minimumMacOS": "13.0",
   "features": [
     "reviewed_import",
@@ -23,6 +22,21 @@
     "persistent_product_catalog",
     "reviewed_daily_updates",
     "filtered_daily_export",
-    "complete_source_protection"
-  ]
+    "complete_source_protection",
+    "lifecycle_onboarding",
+    "reviewed_custom_install",
+    "recoverable_app_upgrade",
+    "reviewed_uninstall_scope",
+    "startup_stage_diagnostics",
+    "exclusive_download_publication",
+    "shared_sku_warehouse_identity",
+    "warehouse_stock_views",
+    "real_source_summary_reconciliation",
+    "shipment_aftersales_ledger",
+    "dual_period_net_sales",
+    "dual_loss_reconciliation",
+    "reviewed_source_writeback",
+    "red_chart_icon"
+  ],
+  "pairedMacVersion": "0.2.1"
 }

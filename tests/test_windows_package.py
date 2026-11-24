@@ -26,15 +26,16 @@ class WindowsPackageTests(unittest.TestCase):
     def setUpClass(cls):
         cls.build = load_build_module()
         cls.release = json.loads((ROOT / "desktop" / "release.json").read_text(encoding="utf-8"))
+        cls.legacy_release = json.loads((Path(__file__).parent / "fixtures/desktop-3-release.json").read_text(encoding="utf-8"))
 
     def test_release_pair_uses_mac_odd_and_windows_even_versions(self):
-        release = self.build.validate_release(self.release)
+        release = self.build.validate_release(self.legacy_release)
         self.assertEqual(release["pairedMacVersion"], "0.1.9")
         self.assertEqual(release["windowsVersion"], "0.1.10")
         self.assertEqual(release["featureLevel"], "desktop-3")
 
     def test_windows_metadata_reuses_the_shared_feature_contract(self):
-        metadata = self.build.windows_metadata(self.release)
+        metadata = self.build.windows_metadata(self.legacy_release)
         self.assertEqual(metadata, {
             "name": "零售通",
             "version": "0.1.10",
@@ -42,6 +43,15 @@ class WindowsPackageTests(unittest.TestCase):
             "featureLevel": "desktop-3",
             "pairedMacVersion": "0.1.9",
         })
+
+    def test_desktop4_is_planned_and_cannot_bypass_the_windows_port_gate(self):
+        self.assertEqual(self.release["featureLevel"], "desktop-4")
+        mac = tuple(map(int, self.release["macVersion"].split(".")))
+        windows = tuple(map(int, self.release["windowsVersion"].split(".")))
+        self.assertEqual(windows[:2], mac[:2])
+        self.assertEqual(windows[2], mac[2] + 1)
+        with self.assertRaisesRegex(ValueError, "desktop-3"):
+            self.build.validate_release(self.release)
 
     def test_source_layout_separates_app_installer_and_uninstaller(self):
         expected = [

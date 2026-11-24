@@ -49,7 +49,7 @@ class DesktopPackageTests(unittest.TestCase):
     def setUpClass(cls):
         cls.bundle = APP.expanduser().resolve()
         if not cls.bundle.is_dir():
-            raise unittest.SkipTest("安装包验收需先在Mac构建或用 --app 指定产物")
+            raise unittest.SkipTest("源码不含构建App，先构建或用 --app 指定后验证：" + str(cls.bundle))
         cls.resources = cls.bundle / "Contents/Resources"
         cls.application = cls.resources / "app"
         cls.runtime = cls.resources / "runtime"

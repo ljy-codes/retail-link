@@ -15,7 +15,7 @@ from tests.temp_support import temporary_directory
 
 PROJECT = Path(__file__).resolve().parents[1]
 TEST_ROOT = Path(__file__).resolve().parent
-DEV = PROJECT
+DEV = PROJECT / "开发空间"
 sys.path.insert(0, str(DEV))
 
 

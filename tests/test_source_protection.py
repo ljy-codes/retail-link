@@ -14,7 +14,7 @@ from unittest.mock import patch
 
 TEST_DIR = Path(__file__).resolve().parent
 ROOT = TEST_DIR.parent
-DEV = ROOT / "开发空间" if (ROOT / "开发空间").is_dir() else ROOT
+DEV = ROOT
 sys.path.insert(0, str(DEV))
 
 import openpyxl

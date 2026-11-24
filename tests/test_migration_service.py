@@ -37,6 +37,14 @@ class MigrationTests(unittest.TestCase):
         self._seed(self.origin, "111", price=12.5)
         self.service = self.module.MigrationService(self.origin)
 
+    @unittest.skipIf(sys.platform == "win32", "Windows uses its user ACL staging contract")
+    def test_migration_staging_stays_private_and_is_cleaned_on_posix(self):
+        with self.service._staging() as directory:
+            self.assertEqual(stat.S_IMODE(directory.stat().st_mode), 0o700)
+            self.assertTrue(directory.is_relative_to(self.origin))
+            staged = directory
+        self.assertFalse(staged.exists())
+
     def tearDown(self):
         self.temp.cleanup()
 

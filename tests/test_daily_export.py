@@ -37,9 +37,8 @@ class DailyExportTests(unittest.TestCase):
         return result, book
 
     def catalog(self):
-        with self.store._connect() as connection:
-            connection.execute("CREATE TABLE IF NOT EXISTS product_catalog (sourceProduct TEXT NOT NULL,sourceShop TEXT NOT NULL,product TEXT NOT NULL,name TEXT NOT NULL,specification TEXT NOT NULL,shop TEXT NOT NULL,source TEXT NOT NULL,revision INTEGER NOT NULL,updatedAt TEXT NOT NULL,PRIMARY KEY(sourceProduct,sourceShop))")
-            connection.execute("INSERT INTO product_catalog VALUES (?,?,?,?,?,?,?,?,?)", ["00001","测试仓","STANDARD-1","虚构关联","1x12","标准仓",json.dumps({"type":"test"}),1,"2026-11-23T12:00:00+08:00"])
+        from backend.daily_import import save_catalog
+        save_catalog(self.store, {"sourceProduct":"00001", "sourceShop":"测试仓", "product":"STANDARD-1", "name":"虚构关联", "specification":"1x12", "shop":"标准仓", "source":{"type":"test"}})
 
     def test_dates_ids_formula_like_text_zero_and_blank_survive_xlsx(self):
         result, book = self.book()

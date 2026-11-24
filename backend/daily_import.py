@@ -15,10 +15,11 @@ import openpyxl
 from openpyxl.utils import get_column_letter
 
 from .daily_records import FIELDS, LABELS, _column, _date, _normalized, _text
+from .product_identity import CATALOG_FIELDS, DAILY_IDENTITY_FIELDS, daily_identity, normalize_catalog, resolve_identity
 
 
-CATALOG_FIELDS = ("sourceProduct", "sourceShop", "product", "name", "specification", "shop")
-CATALOG_LABELS = dict(zip(CATALOG_FIELDS, ("来源商品ID", "来源仓位", "标准商品标识", "商品名称", "规格", "标准仓位")))
+CATALOG_LABELS = dict(zip(CATALOG_FIELDS, ("来源商品ID", "来源仓位", "标准商品标识", "商品名称", "规格", "标准仓位",
+    "来源系统", "来源SKU", "来源规格", "来源仓库ID", "标准仓库ID")))
 
 
 def fingerprint(value):
@@ -32,13 +33,13 @@ def _same(left, right):
 def review_records(connection, records, on_conflict="skip", context=None):
     review, counts = [], dict.fromkeys(("new", "unchanged", "conflict", "fill", "deleted"), 0)
     for incoming in records:
-        old = connection.execute("SELECT * FROM daily_records WHERE date=? AND product=? AND shop=?", [incoming[k] for k in ("date", "product", "shop")]).fetchone()
+        old = connection.execute("SELECT * FROM daily_records WHERE identityKey=?", [daily_identity(incoming)]).fetchone()
         existing = dict(old) if old is not None else None
         if existing:
             existing["source"] = json.loads(existing["source"])
             existing["deleted"] = bool(existing["deleted"])
         differences = [{"field": field, "label": LABELS[field], "old": existing[field], "new": incoming[field]}
-                       for field in ("name", "price", "salesQuantity") if existing and not _same(existing[field], incoming[field])]
+                       for field in ("name", "shop", "price", "salesQuantity") if existing and not _same(existing[field], incoming[field])]
         if existing is None:
             status = "new"
         elif existing["deleted"]:
@@ -94,7 +95,9 @@ def detect_paired_mapping(path, sheet_name=None):
                     continue
                 aliases = {"product": ("商品id", "商品编码", "sku", "产品代码"),
                            "name": ("产品", "商品名称", "产品名称", "商品名"),
-                           "shop": ("仓位", "仓库", "仓库名称", "店铺", "地区")}
+                           "shop": ("仓位", "仓库", "仓库名称", "店铺", "地区"),
+                           "specification": ("商品规格", "销售规格", "规格"), "sourceSku": ("sku编码", "来源sku", "sku"),
+                           "warehouseId": ("仓库id",), "sourceSystem": ("来源系统",)}
                 columns = {}
                 for column in range(1, min(sheet.max_column, 512) + 1):
                     title = _text(_merged_value(sheet, header, column)).lower().replace(" ", "")
@@ -117,7 +120,7 @@ def parse_paired(entry, body):
         if mapping.get("sheet") not in workbook.sheetnames:
             raise ValueError("所选工作表不存在，请重新选择。")
         sheet = workbook[mapping["sheet"]]
-        columns = {field: _column((mapping.get("columns") or {}).get(field)) for field in ("product", "name", "shop")}
+        columns = {field: _column((mapping.get("columns") or {}).get(field)) for field in ("product", "name", "shop", *DAILY_IDENTITY_FIELDS)}
         if not columns["product"]:
             raise ValueError("请指定商品标识列。")
         header = int(mapping.get("dateHeaderRow", mapping.get("headerRow", 1)))
@@ -175,13 +178,14 @@ def parse_paired(entry, body):
                     if error:
                         raise ValueError(error)
                     record = _normalized({"date": day, "product": product, "name": name, "shop": shop,
+                        **{key: _text(_merged_value(sheet, row, columns[key])) if columns[key] else "" for key in DAILY_IDENTITY_FIELDS},
                         "price": amount, "salesQuantity": quantity, "source": {
                             "filename": entry.get("filename") or Path(entry["path"]).name,
                             "sha256": entry.get("sha256", ""), "sheet": sheet.title, "row": row,
                             "layout": "paired_dates", "dateCell": f"{get_column_letter(date_column)}{header}",
                             "priceCell": f"{get_column_letter(price)}{row}" if price else "",
                             "salesCell": f"{get_column_letter(sales)}{row}" if sales else ""}})
-                    key = (day, product, shop)
+                    key = record["identityKey"]
                     if key in seen:
                         duplicates += 1
                         raise ValueError("同一文件中同日同商品同仓位重复；只保留首次记录，请核对。")
@@ -203,40 +207,40 @@ def catalog_row(row):
     return result
 
 
-def normalize_catalog(record):
-    if not isinstance(record, dict):
-        raise ValueError("商品对照应为对象。")
-    normalized = {key: _text(record.get(key)) for key in CATALOG_FIELDS}
-    if not normalized["sourceProduct"] or not normalized["product"]:
-        raise ValueError("来源商品ID与标准商品标识均不能为空。")
-    if any(len(value) > (500 if key == "name" else 200) for key, value in normalized.items()):
-        raise ValueError("商品对照字段过长。")
-    normalized["name"] = normalized["name"] or normalized["product"]
-    normalized["source"] = record.get("source") or "人工确认"
-    json.dumps(normalized["source"], ensure_ascii=False, allow_nan=False)
-    return normalized
-
 
 def list_catalog(store):
     with store._connect() as connection:
-        rows = connection.execute("SELECT * FROM product_catalog ORDER BY sourceProduct,sourceShop").fetchall()
+        rows = connection.execute("SELECT * FROM product_catalog ORDER BY sourceProduct,sourceSpecification,sourceWarehouseId,sourceShop").fetchall()
     return {"items": [catalog_row(row) for row in rows], "total": len(rows)}
 
 
 def _save_catalog(connection, record, on_conflict="skip", expected_revision=None):
-    old = connection.execute("SELECT * FROM product_catalog WHERE sourceProduct=? AND sourceShop=?", [record["sourceProduct"], record["sourceShop"]]).fetchone()
+    old = connection.execute("SELECT * FROM product_catalog WHERE catalogId=?", [record["catalogId"]]).fetchone()
+    # Old callers may omit newly introduced qualifiers while editing one legacy
+    # alias. Resolve only a unique alias; never choose among SKU/warehouse IDs.
+    if old is None and expected_revision is not None:
+        candidates = connection.execute("SELECT * FROM product_catalog WHERE sourceProduct=? AND sourceShop=?", [record["sourceProduct"], record["sourceShop"]]).fetchall()
+        if len(candidates) == 1 and not any(record[key] for key in ("sourceSystem", "sourceSku", "sourceWarehouseId")):
+            prior = catalog_row(candidates[0])
+            record = normalize_catalog(prior | {key: record[key] for key in ("product", "name", "specification", "shop", "warehouseId")})
+            old = candidates[0]
     if expected_revision is not None and (old is None or old["revision"] != int(expected_revision)):
         raise ValueError("商品对照已变化，请刷新后重新确认。")
     if old and (on_conflict == "skip" or all(record[key] == old[key] for key in CATALOG_FIELDS)):
         return {"status": "skipped", "record": catalog_row(old)}
+    if record["specification"]:
+        conflicts = connection.execute("SELECT specification FROM product_catalog WHERE product=? AND catalogId<>? AND specification<>'' AND specification<>?", [record["product"], record["catalogId"], record["specification"]]).fetchone()
+        if conflicts:
+            raise ValueError("同一标准商品标识对应不同规格，请为不同SKU使用不同标准商品标识。")
     now = datetime.now(timezone.utc).isoformat()
     if old:
-        connection.execute("UPDATE product_catalog SET product=?,name=?,specification=?,shop=?,source=?,revision=revision+1,updatedAt=? WHERE sourceProduct=? AND sourceShop=?",
-            [record[key] for key in ("product", "name", "specification", "shop")] + [json.dumps(record["source"], ensure_ascii=False), now, record["sourceProduct"], record["sourceShop"]])
+        connection.execute("UPDATE product_catalog SET " + ",".join(key + "=?" for key in CATALOG_FIELDS) + ",source=?,revision=revision+1,updatedAt=? WHERE catalogId=?",
+            [record[key] for key in CATALOG_FIELDS] + [json.dumps(record["source"], ensure_ascii=False), now, record["catalogId"]])
     else:
-        connection.execute("INSERT INTO product_catalog(sourceProduct,sourceShop,product,name,specification,shop,source,revision,updatedAt) VALUES(?,?,?,?,?,?,?,1,?)",
-            [record[key] for key in CATALOG_FIELDS] + [json.dumps(record["source"], ensure_ascii=False), now])
-    row = connection.execute("SELECT * FROM product_catalog WHERE sourceProduct=? AND sourceShop=?", [record["sourceProduct"], record["sourceShop"]]).fetchone()
+        keys = ("catalogId", *CATALOG_FIELDS, "source", "revision", "updatedAt")
+        connection.execute("INSERT INTO product_catalog(" + ",".join(keys) + ") VALUES(" + ",".join("?" for _ in keys) + ")",
+            [record["catalogId"], *[record[key] for key in CATALOG_FIELDS], json.dumps(record["source"], ensure_ascii=False), 1, now])
+    row = connection.execute("SELECT * FROM product_catalog WHERE catalogId=?", [record["catalogId"]]).fetchone()
     return {"status": "updated" if old else "created", "record": catalog_row(row)}
 
 
@@ -248,15 +252,24 @@ def save_catalog(store, record, expected_revision=None):
 
 
 def apply_catalog(store, result):
-    links = {(item["sourceProduct"], item["sourceShop"]): item for item in list_catalog(store)["items"]}
+    catalog = list_catalog(store)["items"]
+    catalog_index = {}
+    for alias in catalog:
+        catalog_index.setdefault(alias["sourceProduct"], []).append(alias)
+        if alias["product"] != alias["sourceProduct"]:
+            catalog_index.setdefault(alias["product"], []).append(alias)
     records, seen = [], set()
     for incoming in result["records"]:
         item = dict(incoming)
-        link = links.get((item["product"], item["shop"]))
-        if link:
-            item["source"] = {"original": item["source"], "catalog": {key: link[key] for key in (*CATALOG_FIELDS, "revision")}}
-            item.update({key: link[key] for key in ("product", "name", "shop")})
-        key = tuple(item[key] for key in ("date", "product", "shop"))
+        link = resolve_identity(catalog_index.get(item["product"], []), item["product"], item["shop"], item.get("specification", ""), item.get("sourceSku", ""), item.get("warehouseId", ""), item.get("sourceSystem", ""))
+        if link["identityStatus"] == "ambiguous":
+            result["issues"].append({"row": incoming.get("source", {}).get("row", ""), "product": incoming["product"], "message": "同一来源商品存在多个规格或仓库ID；缺少唯一关联字段，该记录待核对，未保存。"})
+            continue
+        if link["identityStatus"] == "mapped":
+            item["source"] = {"original": item["source"], "catalog": link}
+            item.update(product=link["product"], name=link["name"], shop=link["warehouse"], warehouseId=link["warehouseId"], specification=link["specification"])
+        key = daily_identity(item)
+        item["identityKey"] = key
         if key in seen:
             result["issues"].append({"row": incoming.get("source", {}).get("row", ""), "product": incoming["product"], "message": "商品对照后出现同日同商品同仓位重复；未累计，请核对对照。"})
             result["duplicateCount"] += 1
@@ -280,7 +293,8 @@ def parse_catalog(entry, sheet_name=None):
                     continue
                 pick = lambda keys: next((titles[key] for key in keys if key in titles), None)
                 columns = {"sourceProduct": source_column, "name": pick(("商品名称", "产品名称", "产品", "商品名")),
-                           "specification": pick(("销售规格", "规格", "商品规格")), "sourceShop": pick(("仓库名称", "仓位", "仓库", "店铺", "地区"))}
+                           "specification": pick(("商品规格", "销售规格", "规格")), "sourceShop": pick(("仓库名称", "仓位", "仓库", "店铺", "地区")),
+                           "sourceSku": pick(("sku编码", "来源sku", "sku", "规格id")), "sourceWarehouseId": pick(("仓库id",)), "sourceSystem": pick(("来源系统",))}
                 if not columns["name"] and not columns["specification"]:
                     continue
                 populated = sorted({cell.row for cell in sheet._cells.values() if cell.value is not None and cell.row > header})
@@ -291,16 +305,25 @@ def parse_catalog(entry, sheet_name=None):
                     values = {key: _text(_merged_value(sheet, row, column)) if column else "" for key, column in columns.items()}
                     if not values["sourceProduct"] or values["sourceProduct"] in {"合计", "总计", "小计"}:
                         continue
-                    record = normalize_catalog(values | {"product": values["sourceProduct"], "shop": values["sourceShop"],
+                    record = normalize_catalog(values | {"product": values["sourceProduct"], "shop": values["sourceShop"], "warehouseId": values["sourceWarehouseId"],
                         "source": {"filename": entry.get("filename") or Path(entry["path"]).name, "sheet": sheet.title, "row": row, "sha256": entry.get("sha256", "")}})
-                    key = (record["sourceProduct"], record["sourceShop"])
+                    key = record["catalogId"]
                     if key in seen:
                         if any(record[field] != seen[key][field] for field in ("name", "specification")):
                             issues.append({"row": row, "product": record["sourceProduct"], "message": "相同商品ID和仓位出现不同名称或规格；该标识全部暂不导入，请拆分标准对照后处理。"})
-                            records = [item for item in records if (item["sourceProduct"], item["sourceShop"]) != key]
+                            records = [item for item in records if item["catalogId"] != key]
                         continue
                     seen[key] = record
                     records.append(record)
+                # Different source specifications are separate SKUs. Give an
+                # imported split a distinct default standard identifier; users
+                # can explicitly link it to an existing standard SKU later.
+                variants = {}
+                for item in records:
+                    variants.setdefault(item["sourceProduct"], set()).add((item["sourceSku"], item["sourceSpecification"]))
+                for item in records:
+                    if len(variants[item["sourceProduct"]]) > 1:
+                        item["product"] = item["sourceProduct"] + " · " + (item["sourceSku"] or item["sourceSpecification"])
                 return {"records": records, "issues": issues, "validCount": len(records), "invalidCount": len(issues)}
         raise ValueError("没有识别到含商品ID及名称／规格的商品资料表。")
     finally:
@@ -310,14 +333,14 @@ def parse_catalog(entry, sheet_name=None):
 def review_catalog(connection, records, on_conflict="skip"):
     review, counts = [], dict.fromkeys(("new", "unchanged", "conflict"), 0)
     for incoming in records:
-        old = catalog_row(connection.execute("SELECT * FROM product_catalog WHERE sourceProduct=? AND sourceShop=?", [incoming["sourceProduct"], incoming["sourceShop"]]).fetchone())
+        old = catalog_row(connection.execute("SELECT * FROM product_catalog WHERE catalogId=?", [incoming["catalogId"]]).fetchone())
         differences = [{"field": field, "label": CATALOG_LABELS[field], "old": old[field], "new": incoming[field]}
-                       for field in ("product", "name", "specification", "shop") if old and old[field] != incoming[field]]
+                       for field in CATALOG_FIELDS if old and old[field] != incoming[field]]
         status = "new" if not old else "conflict" if differences else "unchanged"
         counts[status] += 1
         review.append({"status": status, "incoming": incoming, "existing": old, "differences": differences})
     return {"review": review, "reviewCounts": counts,
-            "previewFingerprint": fingerprint({"review": review, "onConflict": on_conflict})}
+            "previewFingerprint": fingerprint({"review": review, "onConflict": on_conflict, "catalog": [dict(row) for row in connection.execute("SELECT * FROM product_catalog ORDER BY catalogId")]})}
 
 
 def import_catalog(store, entry, body):

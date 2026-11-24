@@ -14,9 +14,11 @@ import openpyxl
 from openpyxl.utils import column_index_from_string, get_column_letter
 from openpyxl.utils.datetime import from_excel
 
+from .product_identity import DAILY_IDENTITY_FIELDS, daily_identity, normalize_catalog
 
-FIELDS = ("date", "product", "name", "shop", "price", "salesQuantity")
-LABELS = {"date": "业务日期", "product": "商品标识", "name": "商品名称", "shop": "店铺／仓库", "price": "当日售价", "salesQuantity": "当日销量"}
+
+FIELDS = ("date", "product", "name", "shop", "price", "salesQuantity", *DAILY_IDENTITY_FIELDS)
+LABELS = {"date": "业务日期", "product": "商品标识", "name": "商品名称", "shop": "店铺／仓库", "price": "当日售价", "salesQuantity": "当日销量", "sourceSystem": "来源系统", "sourceSku": "来源SKU", "specification": "规格", "warehouseId": "仓库ID"}
 
 
 def _text(value):
@@ -71,6 +73,10 @@ def _normalized(record):
               "price": _number(record.get("price"), "price"),
               "salesQuantity": _number(record.get("salesQuantity"), "salesQuantity"),
               "source": record.get("source") or "手工录入"}
+    result.update({key: _text(record.get(key)) for key in DAILY_IDENTITY_FIELDS})
+    if any(len(result[key]) > 200 for key in DAILY_IDENTITY_FIELDS):
+        raise ValueError("商品或仓库身份字段过长。")
+    result["identityKey"] = daily_identity(result)
     if result["date"] > datetime.now(timezone(timedelta(hours=8))).date().isoformat():
         raise ValueError("业务日期在未来。当前入口记录已发生的每日售价与销量，计划价格请待生效后记录。")
     if result["price"] is None and result["salesQuantity"] is None:
@@ -89,28 +95,53 @@ class DailyStore:
         directory.mkdir(parents=True, exist_ok=True)
         self.path = directory / "daily.sqlite3"
         with self._connect() as connection:
-            connection.executescript('''
-                CREATE TABLE IF NOT EXISTS daily_records (
-                    id TEXT PRIMARY KEY, date TEXT NOT NULL, product TEXT NOT NULL,
-                    name TEXT NOT NULL, shop TEXT NOT NULL DEFAULT '', price REAL,
-                    salesQuantity REAL, source TEXT NOT NULL, createdAt TEXT NOT NULL,
-                    updatedAt TEXT NOT NULL, deleted INTEGER NOT NULL DEFAULT 0,
-                    revision INTEGER NOT NULL DEFAULT 1,
-                    UNIQUE(date, product, shop)
-                );
-                CREATE TABLE IF NOT EXISTS daily_revisions (
-                    seq INTEGER PRIMARY KEY AUTOINCREMENT, recordId TEXT NOT NULL,
-                    savedAt TEXT NOT NULL, action TEXT NOT NULL, snapshot TEXT NOT NULL
-                );
-                CREATE INDEX IF NOT EXISTS daily_date ON daily_records(deleted, date);
-                CREATE TABLE IF NOT EXISTS product_catalog (
-                    sourceProduct TEXT NOT NULL, sourceShop TEXT NOT NULL DEFAULT '',
-                    product TEXT NOT NULL, name TEXT NOT NULL,
-                    specification TEXT NOT NULL DEFAULT '', shop TEXT NOT NULL DEFAULT '',
-                    source TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 1,
-                    updatedAt TEXT NOT NULL, PRIMARY KEY(sourceProduct,sourceShop)
-                );
-            ''')
+            version = connection.execute("PRAGMA user_version").fetchone()[0]
+            if version not in (0, 1, 2):
+                raise ValueError("日记录数据库版本过新，请使用相应版本工具。")
+            connection.execute("BEGIN IMMEDIATE")
+            connection.execute("""CREATE TABLE IF NOT EXISTS daily_revisions (
+                seq INTEGER PRIMARY KEY AUTOINCREMENT, recordId TEXT NOT NULL,
+                savedAt TEXT NOT NULL, action TEXT NOT NULL, snapshot TEXT NOT NULL)""")
+            old_columns = {row[1] for row in connection.execute("PRAGMA table_info(daily_records)")}
+            if old_columns and "identityKey" not in old_columns:
+                connection.execute("ALTER TABLE daily_records RENAME TO daily_records_legacy")
+            connection.execute("""CREATE TABLE IF NOT EXISTS daily_records (
+                id TEXT PRIMARY KEY, date TEXT NOT NULL, product TEXT NOT NULL,
+                name TEXT NOT NULL, shop TEXT NOT NULL DEFAULT '', price REAL,
+                salesQuantity REAL, source TEXT NOT NULL, createdAt TEXT NOT NULL,
+                updatedAt TEXT NOT NULL, deleted INTEGER NOT NULL DEFAULT 0,
+                revision INTEGER NOT NULL DEFAULT 1,
+                sourceSystem TEXT NOT NULL DEFAULT '', sourceSku TEXT NOT NULL DEFAULT '',
+                specification TEXT NOT NULL DEFAULT '', warehouseId TEXT NOT NULL DEFAULT '',
+                identityKey TEXT NOT NULL UNIQUE)""")
+            if old_columns and "identityKey" not in old_columns:
+                for row in connection.execute("SELECT * FROM daily_records_legacy").fetchall():
+                    item = dict(row)
+                    item.update({key: "" for key in DAILY_IDENTITY_FIELDS})
+                    item["identityKey"] = daily_identity(item)
+                    keys = list(item)
+                    connection.execute("INSERT INTO daily_records(" + ",".join(keys) + ") VALUES(" + ",".join("?" for _ in keys) + ")", [item[key] for key in keys])
+                connection.execute("DROP TABLE daily_records_legacy")
+            connection.execute("CREATE INDEX IF NOT EXISTS daily_date ON daily_records(deleted,date)")
+            catalog_columns = {row[1] for row in connection.execute("PRAGMA table_info(product_catalog)")}
+            if catalog_columns and "catalogId" not in catalog_columns:
+                connection.execute("ALTER TABLE product_catalog RENAME TO product_catalog_legacy")
+            connection.execute("""CREATE TABLE IF NOT EXISTS product_catalog (
+                catalogId TEXT PRIMARY KEY, sourceProduct TEXT NOT NULL, sourceShop TEXT NOT NULL DEFAULT '',
+                product TEXT NOT NULL, name TEXT NOT NULL, specification TEXT NOT NULL DEFAULT '',
+                shop TEXT NOT NULL DEFAULT '', sourceSystem TEXT NOT NULL DEFAULT '',
+                sourceSku TEXT NOT NULL DEFAULT '', sourceSpecification TEXT NOT NULL DEFAULT '',
+                sourceWarehouseId TEXT NOT NULL DEFAULT '', warehouseId TEXT NOT NULL DEFAULT '',
+                source TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 1, updatedAt TEXT NOT NULL)""")
+            if catalog_columns and "catalogId" not in catalog_columns:
+                for row in connection.execute("SELECT * FROM product_catalog_legacy").fetchall():
+                    old = dict(row)
+                    item = normalize_catalog(old | {"source": json.loads(old["source"])})
+                    item.update(source=old["source"], revision=old["revision"], updatedAt=old["updatedAt"])
+                    keys = list(item)
+                    connection.execute("INSERT INTO product_catalog(" + ",".join(keys) + ") VALUES(" + ",".join("?" for _ in keys) + ")", [item[key] for key in keys])
+                connection.execute("DROP TABLE product_catalog_legacy")
+            connection.execute("PRAGMA user_version=2")
 
     @contextmanager
     def _connect(self):
@@ -136,6 +167,9 @@ class DailyStore:
         result = dict(row)
         result["source"] = json.loads(result["source"])
         result["deleted"] = bool(result["deleted"])
+        for key in DAILY_IDENTITY_FIELDS:
+            result.setdefault(key, "")
+        result.setdefault("identityKey", daily_identity(result))
         return result
 
     def list(self, start=None, end=None, product="", shop="", deleted=False, offset=0, limit=500):
@@ -179,12 +213,11 @@ class DailyStore:
     def _save(self, connection, normalized, on_conflict="skip"):
         if on_conflict not in {"skip", "replace", "merge"}:
             raise ValueError("重复处理方式仅支持 skip、merge 或 replace。")
-        existing = connection.execute("SELECT * FROM daily_records WHERE date=? AND product=? AND shop=?",
-                                      [normalized[k] for k in ("date", "product", "shop")]).fetchone()
+        existing = connection.execute("SELECT * FROM daily_records WHERE identityKey=?", [normalized["identityKey"]]).fetchone()
         if existing is not None:
             if on_conflict == "skip" or existing["deleted"]:
                 return {"record": self._row(existing), "status": "skipped", "reason": "已有已删除记录，请先恢复。" if existing["deleted"] else "同日同商品已有记录，默认保留原值。"}
-            if all(normalized[field] == existing[field] for field in ("name", "price", "salesQuantity")):
+            if all(normalized[field] == existing[field] for field in ("name", "shop", "price", "salesQuantity")):
                 return {"record": self._row(existing), "status": "skipped", "reason": "内容未变化，不生成重复版本。"}
             if on_conflict == "merge":
                 normalized = dict(normalized)
@@ -199,14 +232,14 @@ class DailyStore:
                 normalized["source"] = {"mode": "补齐缺失字段", "previous": json.loads(existing["source"]), "incoming": normalized["source"]}
             self._archive(connection, existing, on_conflict)
             updated = datetime.now(timezone.utc).isoformat()
-            connection.execute("UPDATE daily_records SET name=?,price=?,salesQuantity=?,source=?,updatedAt=?,revision=revision+1 WHERE id=?",
-                               [normalized["name"], normalized["price"], normalized["salesQuantity"], json.dumps(normalized["source"], ensure_ascii=False), updated, existing["id"]])
+            connection.execute("UPDATE daily_records SET name=?,shop=?,price=?,salesQuantity=?,source=?,updatedAt=?,revision=revision+1 WHERE id=?",
+                               [normalized["name"], normalized["shop"], normalized["price"], normalized["salesQuantity"], json.dumps(normalized["source"], ensure_ascii=False), updated, existing["id"]])
             identifier, status = existing["id"], "updated"
         else:
             identifier = uuid.uuid4().hex
             now = datetime.now(timezone.utc).isoformat()
-            connection.execute("INSERT INTO daily_records(id,date,product,name,shop,price,salesQuantity,source,createdAt,updatedAt) VALUES(?,?,?,?,?,?,?,?,?,?)",
-                               [identifier, normalized["date"], normalized["product"], normalized["name"], normalized["shop"], normalized["price"], normalized["salesQuantity"], json.dumps(normalized["source"], ensure_ascii=False), now, now])
+            connection.execute("INSERT INTO daily_records(id,date,product,name,shop,price,salesQuantity,source,createdAt,updatedAt,sourceSystem,sourceSku,specification,warehouseId,identityKey) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                               [identifier, normalized["date"], normalized["product"], normalized["name"], normalized["shop"], normalized["price"], normalized["salesQuantity"], json.dumps(normalized["source"], ensure_ascii=False), now, now] + [normalized[key] for key in (*DAILY_IDENTITY_FIELDS, "identityKey")])
             status = "created"
         row = connection.execute("SELECT * FROM daily_records WHERE id=?", [identifier]).fetchone()
         return {"record": self._row(row), "status": status}
@@ -250,6 +283,10 @@ class DailyStore:
         with self._connect() as connection:
             return {(row[0], row[1], row[2]) for row in connection.execute("SELECT date,product,shop FROM daily_records")}
 
+    def existing_identity_keys(self):
+        with self._connect() as connection:
+            return {row[0] for row in connection.execute("SELECT identityKey FROM daily_records")}
+
     def reviewed_import(self, records, on_conflict="skip", preview_only=True, expected_fingerprint=None,
                         require_fingerprint=False, context=None):
         from .daily_import import review_records
@@ -290,7 +327,7 @@ def inspect_daily(path, filename):
     information = inspect_workbook(path)
     aliases = {"date": ["日期", "业务日期", "销售日期", "date"], "product": ["商品编码", "商品id", "sku", "产品代码", "简称", "商品", "产品"],
                "name": ["商品名称", "产品名称", "产品全称", "name"], "shop": ["店铺", "仓库", "仓位", "shop"],
-               "price": ["当日售价", "当前售价", "最新售价", "售价", "销售价", "零售价", "供价", "price"], "salesQuantity": ["当日销量", "销售数量", "日销量", "销量", "quantity"]}
+               "price": ["当日售价", "当前售价", "最新售价", "售价", "销售价", "零售价", "供价", "price"], "salesQuantity": ["当日销量", "销售数量", "日销量", "销量", "quantity"], "specification": ["商品规格", "销售规格", "规格"], "sourceSku": ["SKU", "sku", "SKU编码", "sku编码"], "warehouseId": ["仓库ID", "仓库id"], "sourceSystem": ["来源系统"]}
     best = None
     for sheet in information["sheets"]:
         columns = {}
@@ -368,7 +405,7 @@ def parse_import(entry, body):
                     title_date = None
                 if title_date and title_date != business_date:
                     raise ValueError(f"销量列日期为 {title_date}，与业务日期 {business_date} 不一致。")
-            key = (normalized["date"], normalized["product"], normalized["shop"])
+            key = normalized["identityKey"]
             if key in seen:
                 duplicates += 1
                 raise ValueError("同一文件中同日同商品同店铺重复；只保留首次记录，请核对。")
@@ -417,8 +454,8 @@ def handle_daily_request(handler, method, path, query, body, data_dir, lookup):
         from .daily_import import apply_catalog
         entry = lookup(body.get("workbookId"))
         result = apply_catalog(store, parse_import(entry, body))
-        existing = store.existing_keys()
-        result["existingCount"] = sum((row["date"], row["product"], row["shop"]) in existing for row in result["records"])
+        existing = store.existing_identity_keys()
+        result["existingCount"] = sum(daily_identity(row) in existing for row in result["records"])
         if not body.get("previewOnly", True) and not result["records"]:
             raise ValueError("没有可保存的日记录，请先修正映射或数据问题。")
         result.update(store.reviewed_import(result["records"], body.get("onConflict", "skip"),

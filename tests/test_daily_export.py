@@ -1,14 +1,15 @@
 """Daily ledger exports and catalog migration, using fictional isolated data."""
 import base64
+from contextlib import closing
 from io import BytesIO
 import json
 from pathlib import Path
 import sqlite3
 import sys
-import tempfile
 import unittest
 
 import openpyxl
+from tests.temp_support import temporary_directory
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -19,7 +20,7 @@ from backend.migration_service import MigrationService
 
 class DailyExportTests(unittest.TestCase):
     def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory(prefix="daily-export-", dir=Path(__file__).resolve().parent)
+        self.tmp = temporary_directory(prefix="daily-export-", directory=Path(__file__).resolve().parent)
         self.root = Path(self.tmp.name)
         self.store = DailyStore(self.root / "data")
         self.store.save({"date":"2025-11-01", "product":"000001", "name":"虚构A", "shop":"测试仓", "price":0, "salesQuantity":None})
@@ -36,9 +37,8 @@ class DailyExportTests(unittest.TestCase):
         return result, book
 
     def catalog(self):
-        with self.store._connect() as connection:
-            connection.execute("CREATE TABLE IF NOT EXISTS product_catalog (sourceProduct TEXT NOT NULL,sourceShop TEXT NOT NULL,product TEXT NOT NULL,name TEXT NOT NULL,specification TEXT NOT NULL,shop TEXT NOT NULL,source TEXT NOT NULL,revision INTEGER NOT NULL,updatedAt TEXT NOT NULL,PRIMARY KEY(sourceProduct,sourceShop))")
-            connection.execute("INSERT INTO product_catalog VALUES (?,?,?,?,?,?,?,?,?)", ["00001","测试仓","STANDARD-1","虚构关联","1x12","标准仓",json.dumps({"type":"test"}),1,"2026-11-23T12:00:00+08:00"])
+        from backend.daily_import import save_catalog
+        save_catalog(self.store, {"sourceProduct":"00001", "sourceShop":"测试仓", "product":"STANDARD-1", "name":"虚构关联", "specification":"1x12", "shop":"标准仓", "source":{"type":"test"}})
 
     def test_dates_ids_formula_like_text_zero_and_blank_survive_xlsx(self):
         result, book = self.book()
@@ -99,7 +99,7 @@ class DailyExportTests(unittest.TestCase):
         preview = target.preview_import(bundle["path"])
         self.assertEqual(preview["counts"]["productCatalog"], 1)
         target.import_bundle(bundle["path"], confirmation_token=preview["token"])
-        with sqlite3.connect(self.root / "target/daily.sqlite3") as connection:
+        with closing(sqlite3.connect(self.root / "target/daily.sqlite3")) as connection:
             self.assertEqual(connection.execute("SELECT product FROM product_catalog").fetchone()[0], "STANDARD-1")
 
     def test_old_database_without_catalog_is_still_migratable(self):

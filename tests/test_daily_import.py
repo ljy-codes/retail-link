@@ -5,10 +5,10 @@ import importlib
 import json
 from pathlib import Path
 import sys
-import tempfile
 import unittest
 
 import openpyxl
+from tests.temp_support import temporary_directory
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -24,7 +24,7 @@ class Handler:
 
 class DailyImportTests(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory(prefix="价量适配自测-", dir=Path(__file__).parent)
+        self.temp = temporary_directory(prefix="价量适配自测-", directory=Path(__file__).parent)
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         self.store = DailyStore(self.root / "data")
@@ -177,11 +177,12 @@ class DailyImportTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "已变化"):
             save_catalog(self.store, row, expected_revision=1)
 
-    def test_catalog_conflicting_specs_are_excluded_until_explicitly_resolved(self):
+    def test_catalog_different_specs_become_distinct_products(self):
         preview = import_catalog(self.store, self.catalog_fixture(conflict=True), {"previewOnly": True})
-        self.assertEqual(preview["validCount"], 1)
-        self.assertEqual(preview["records"][0]["sourceProduct"], "0002")
-        self.assertIn("不同名称或规格", preview["issues"][0]["message"])
+        self.assertEqual(preview["validCount"], 3)
+        variants = [row for row in preview["records"] if row["sourceProduct"] == "0001"]
+        self.assertEqual(len({row["product"] for row in variants}), 2)
+        self.assertEqual(preview["issues"], [])
 
     def test_catalog_commit_requires_current_preview(self):
         entry = self.catalog_fixture()

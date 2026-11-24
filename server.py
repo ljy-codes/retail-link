@@ -26,6 +26,10 @@ import webbrowser
 import zipfile
 
 APP_DIR = Path(__file__).resolve().parent
+# The Windows embeddable distribution uses a ._pth file, which omits the
+# script directory from sys.path. Keep local backend imports available there.
+if str(APP_DIR) not in sys.path:
+    sys.path.insert(0, str(APP_DIR))
 PROJECT_DIR = APP_DIR
 WEB_DIR = APP_DIR / "web"
 DATA_DIR = PROJECT_DIR / "本地数据"
@@ -41,7 +45,7 @@ def platform_name():
 
 def application_metadata():
     """The packaged app supplies its own platform release metadata."""
-    metadata = {"version": "0.1.9", "platform": platform_name(), "featureLevel": "desktop-3"}
+    metadata = {"version": "0.2.1", "platform": platform_name(), "featureLevel": "desktop-4"}
     source = APP_DIR / "版本.json"
     if source.is_file():
         saved = json.loads(source.read_text(encoding="utf-8"))
@@ -71,6 +75,30 @@ IO_LOCK = threading.RLock()
 EXPORT_PREVIEWS = {}
 MIGRATION_SERVICES = {}
 DATASET_SERVICES = {}
+OPERATIONS_STORES = {}
+WRITEBACK_SERVICES = {}
+
+
+def product_catalog():
+    from backend.daily_records import DailyStore
+    from backend.daily_import import list_catalog
+    return list_catalog(DailyStore(DATA_DIR))["items"]
+
+
+def operations_store():
+    from backend.operations import OperationsStore
+    directory = DATA_DIR.expanduser().resolve()
+    if directory not in OPERATIONS_STORES:
+        OPERATIONS_STORES[directory] = OperationsStore(directory)
+    return OPERATIONS_STORES[directory]
+
+
+def writeback_service():
+    from backend.source_writeback import SourceWriteback
+    directory = DATA_DIR.expanduser().resolve()
+    if directory not in WRITEBACK_SERVICES:
+        WRITEBACK_SERVICES[directory] = SourceWriteback(directory, [resource_directory(), directory / "writeback"])
+    return WRITEBACK_SERVICES[directory]
 
 
 def export_directory():
@@ -314,6 +342,9 @@ def check_workbook(path: Path, filename=None):
 
 
 def register_workbook(path: Path, display_name=None):
+    from backend.source_writeback import has_user_symlink
+    selected_path = path.expanduser().absolute()
+    selected_via_symlink = has_user_symlink(selected_path)
     path = path.expanduser().resolve()
     check_workbook(path)
     digest = hashlib.sha256(path.read_bytes()).hexdigest()
@@ -325,6 +356,7 @@ def register_workbook(path: Path, display_name=None):
         WORKBOOKS[workbook_id] = {
             "path": path, "filename": display_name or path.name, "sha256": digest,
             "size": path.stat().st_size, "mtime": path.stat().st_mtime_ns,
+            "selectedPath": str(selected_path), "selectedViaSymlink": selected_via_symlink,
         }
     inspected.update({"workbookId": workbook_id, "filename": display_name or path.name,
                       "sourcePath": str(path), "sha256": digest})
@@ -361,7 +393,8 @@ class Handler(BaseHTTPRequestHandler):
         if status >= 400:
             try:
                 export_service().log_operation("request", {"errorCode": "HTTP_" + str(status), "sourceId": urlparse(self.path).path, "result": "failed"})
-            except OSError:
+            except Exception:
+                # Error logging must never prevent the actual error response.
                 pass
         body = json_bytes(value)
         self.send_response(status)
@@ -381,6 +414,73 @@ class Handler(BaseHTTPRequestHandler):
             return True
         self.send_json({"error": "请从本机工具页面操作。"}, 403)
         return False
+
+    def dispatch_v02(self, method, parsed, body=None):
+        route = parsed.path
+        if not route.startswith(("/api/operations", "/api/writeback")):
+            return False
+        body = body or {}
+        query = parse_qs(parsed.query)
+        if method == "GET" and route == "/api/operations":
+            self.send_json(operations_store().list(kind=query.get("kind", [None])[0]))
+        elif method == "GET" and route == "/api/operations/revisions":
+            self.send_json(operations_store().revisions(query.get("id", [""])[0]))
+        elif method == "GET" and route == "/api/writeback/settings":
+            self.send_json(writeback_service().settings())
+        elif method == "GET" and route == "/api/writeback/history":
+            self.send_json(writeback_service().history())
+        elif method == "POST" and route == "/api/operations/import":
+            store = operations_store()
+            if body.get("previewOnly", True):
+                entry = get_workbook(body["workbookId"]) if body.get("workbookId") else None
+                self.send_json(store.preview_import(entry, body))
+            else:
+                if body.get("confirmed") is not True:
+                    raise ValueError("请确认业务导入预览后再保存。")
+                self.send_json(store.commit_import(body))
+                export_service().log_operation("operations_import", {"result": "success"})
+        elif method == "POST" and route in {"/api/operations/reconcile", "/api/operations/export", "/api/operations/loss"}:
+            store = operations_store()
+            if route.endswith("/loss"):
+                result = store.loss_report(body.get("start"), body.get("end"), catalog=product_catalog())
+            else:
+                result = store.reconcile(body.get("start"), body.get("end"), as_of=body.get("asOf"),
+                                         catalog=product_catalog(), coverage=body.get("coverage"))
+            if route.endswith("/export"):
+                from io import BytesIO
+                stream = BytesIO()
+                book = store.export_workbook(result, catalog=product_catalog())
+                book.save(stream)
+                book.close()
+                self.send_json({"filename": "零售通-经营核对.xlsx", "contentType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                "dataBase64": base64.b64encode(stream.getvalue()).decode("ascii")})
+            else:
+                self.send_json(result)
+        elif method == "POST" and route == "/api/writeback/settings":
+            if body.get("enabled") is True and body.get("confirmed") is not True:
+                raise ValueError("请确认了解源写回将修改所选原件。")
+            self.send_json(writeback_service().settings(body.get("enabled")))
+        elif method == "POST" and route in {"/api/writeback/template", "/api/writeback/describe", "/api/writeback/preview"}:
+            entry = get_workbook(body.get("workbookId"))
+            service = writeback_service()
+            if route.endswith("/template"):
+                result = service.register_template(entry, body)
+            elif route.endswith("/describe"):
+                result = service.describe(entry, body.get("templateId"))
+            else:
+                result = service.preview(entry, body)
+            self.send_json(result)
+        elif method == "POST" and route == "/api/writeback/commit":
+            result = writeback_service().commit(body.get("token"), body.get("confirmed") is True)
+            export_service().log_operation("source_writeback", {"result": "success", "source": result["path"], "operationId": result["id"]})
+            self.send_json(result)
+        elif method == "POST" and route == "/api/writeback/restore":
+            result = writeback_service().restore(body.get("operationId"), body.get("confirmed") is True)
+            export_service().log_operation("source_writeback_restore", {"result": "success", "source": result["path"]})
+            self.send_json(result)
+        else:
+            self.send_json({"error": "经营核对或受控写回接口不存在。"}, 404)
+        return True
 
     def dispatch_daily(self, method, parsed, body=None):
         if parsed.path != "/api/daily" and not parsed.path.startswith("/api/daily/"):
@@ -412,12 +512,16 @@ class Handler(BaseHTTPRequestHandler):
                                        "sampleAvailable": SAMPLE.is_file(),
                                        "defaultDirectory": str(ORIGINAL_DIR),
                                        "defaultExportDirectory": str(export_directory()),
-                                       "capabilities": ["excel", "directory", "manual", "mapping", "history", "local_export", "migration", "multi_import", "format_review"]})
+                                       "capabilities": ["excel", "directory", "manual", "mapping", "history", "local_export", "migration", "multi_import", "format_review", "operations", "source_writeback"]})
             if parsed.path == "/api/import/templates":
                 return self.send_json({"templates": dataset_service().templates()})
             if self.dispatch_daily("GET", parsed):
                 return
+            if self.dispatch_v02("GET", parsed):
+                return
             if parsed.path == "/api/sample":
+                if not SAMPLE.is_file():
+                    raise ValueError("当前安装包未附带样例文件，请选择本地 Excel 工作簿。")
                 return self.send_json(register_workbook(SAMPLE))
             if parsed.path == "/api/preview":
                 query = parse_qs(parsed.query)
@@ -528,6 +632,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json({"inspection": inspection})
             if self.dispatch_daily("POST", parsed, body):
                 return
+            if self.dispatch_v02("POST", parsed, body):
+                return
             if route == "/api/export/preview":
                 return self.send_json(preview_export(body))
             if route == "/api/export/xlsx":
@@ -567,6 +673,9 @@ class Handler(BaseHTTPRequestHandler):
                     confirmation_token=body.get("token"))
                 HISTORY_STORES.clear()
                 DATASET_SERVICES.clear()
+                OPERATIONS_STORES.clear()
+                writeback_service().settings(False)
+                WRITEBACK_SERVICES.clear()
                 return self.send_json(result)
             restore_match = re.fullmatch(r"/api/history/([0-9]{1,64})/restore", route)
             if restore_match:
@@ -618,9 +727,16 @@ class Handler(BaseHTTPRequestHandler):
                     raise ValueError("分析配置格式无效。")
                 if entry.get("dataset") and config.get("mappings", {}) != entry["dataset"].get("config", {}).get("mappings", {}):
                     raise ValueError("组合输入的工作表和字段已按预览范围确认；请通过合并导入重新选择范围和映射。")
+                config = dict(config)
+                config["productCatalog"] = product_catalog()
                 result = engine().analyze_workbook(entry["path"], config)
                 if not result.get("products"):
                     raise ValueError("没有识别到商品数据。请在页面配置所选文件的工作表、表头行和商品列，再重新分析。")
+                report = operations_store().reconcile(result["period"] + "-01", result["asOf"],
+                    as_of=config.get("afterSalesAsOf") or result["asOf"], catalog=config["productCatalog"])
+                for product in result["products"]:
+                    product["netSales"] = [item for item in report["items"] if str(item["product"]) == str(product["id"])]
+                result["operationsSnapshot"] = {key: report[key] for key in ("start", "end", "asOf", "generation", "complete", "coverage", "summary", "basis")}
                 result["filename"] = entry["filename"]
                 result["workbookId"] = str(body.get("workbookId"))
                 result["generatedAt"] = datetime.now(timezone.utc).isoformat()
@@ -639,7 +755,7 @@ class Handler(BaseHTTPRequestHandler):
                     labels = dataset.get("warehouseLabelsByProduct") or {}
                     for product in result["products"]:
                         warehouses = labels.get(product["id"], [])
-                        if warehouses:
+                        if warehouses and not product.get("warehouseStocks"):
                             product["warehouse"] = "、".join(warehouses)
                         product["issues"] = [issue for issue in result["issues"] if issue.get("product") == product["id"]]
                         own = product["issues"]

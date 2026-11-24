@@ -7,10 +7,10 @@ import json
 from pathlib import Path
 import shutil
 import sys
-import tempfile
 import unittest
 
 import openpyxl
+from tests.temp_support import temporary_directory
 
 ROOT = Path(__file__).resolve().parents[1]
 TEST_DIR = Path(__file__).resolve().parent
@@ -28,7 +28,7 @@ class DatasetBehaviorTests(unittest.TestCase):
         cls.analyzer = importlib.import_module("backend.analyzer")
 
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory(prefix="dataset-", dir=TEST_DIR)
+        self.temp = temporary_directory(prefix="dataset-", directory=TEST_DIR)
         self.root = Path(self.temp.name)
         self.data_dir = self.root / "data"
         self.entries = {}

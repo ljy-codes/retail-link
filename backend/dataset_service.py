@@ -40,9 +40,10 @@ class DataSetService:
     ROLES = tuple(analyzer.ROLE_NAMES)
     MOVEMENTS = {"sales", "outbound", "orders", "transit", "loss"}
     FIELDS = ("product", "code", "name", "warehouse", "pack", "plan", "stockLarge", "stockSmall",
-              "basePriceLarge", "basePrice", "supplyPrice", "date", "quantity", "amount", "supplyAmount")
+              "basePriceLarge", "basePrice", "supplyPrice", "date", "quantity", "amount", "supplyAmount",
+              "warehouseId", "sourceSku", "sourceSystem", "specification")
     LABELS = {**analyzer.FIELD_LABELS, "name": "商品名称"}
-    NUMERIC = set(FIELDS) - {"product", "code", "name", "warehouse", "date"}
+    NUMERIC = set(FIELDS) - {"product", "code", "name", "warehouse", "date", "warehouseId", "sourceSku", "sourceSystem", "specification"}
 
     def __init__(self, data_dir, lookup, inspect=None):
         self.data_dir = Path(data_dir).expanduser().resolve()
@@ -395,6 +396,14 @@ class DataSetService:
                     if not pid or analyzer._total_label(pid):continue
                     record={key:get(row,key) for key in self.FIELDS}
                     record["product"]=pid
+                    for key in ("warehouseId", "sourceSku", "sourceSystem", "specification"):
+                        record[key] = analyzer._text(record[key])
+                    raw_pid = pid
+                    qualifier = record["sourceSku"] or record["specification"]
+                    if qualifier:
+                        pid += " · " + qualifier
+                    if record["sourceSystem"]:
+                        pid += " · " + record["sourceSystem"]
                     record["code"]=analyzer._text(record["code"])
                     record["name"]=analyzer._text(record["name"])
                     record["warehouse"]=analyzer._text(record["warehouse"]) or analyzer._text(selection.get("warehouse"))
@@ -407,7 +416,7 @@ class DataSetService:
                             issue("MISSING_FORMULA_CACHE","公式没有可读保存值",f"{sheet.title}!{get_column_letter(col)}{row} 没有公式缓存，请由原系统重算保存或改用原始明细。","error",info["sourceId"],row)
                     if record["code"]:
                         identities[(role,pid)].add(record["code"])
-                    meta=metadata.setdefault(pid,{"product":pid})
+                    meta=metadata.setdefault(pid,{"product":raw_pid, **{key:record[key] for key in ("sourceSku", "sourceSystem", "specification")}})
                     if record["pack"] is not None and meta.get("pack") is not None and record["pack"] != meta["pack"]:
                         issue("PACK_CONFLICT", "商品箱规不一致", f"商品 {pid} 在所选来源中对应不同箱规，无法确认单位换算；请调整标识或排除冲突来源。", "error", info["sourceId"], row)
                     meta_fields = ("name", "pack") if role in self.MOVEMENTS else ("name", "pack", "basePrice", "basePriceLarge")
@@ -447,9 +456,9 @@ class DataSetService:
                             elif analysis_date and stock_date < analysis_date:
                                 issue("OLDER_STOCK_SNAPSHOT", "库存采用较早日期快照",
                                       f"{sheet.title} 采用 {stock_date.isoformat()} 的库存快照，早于分析截止日 {analysis_date.isoformat()}；该库存不代表截止日的实时现货。", "warning", info["sourceId"])
-                        if not record["warehouse"]:
+                        if not record["warehouse"] and not record["warehouseId"]:
                             issue("STOCK_WAREHOUSE_REQUIRED","库存仓库未指定",f"{sheet.title} 第{row}行缺少仓库，请映射仓库列或填写固定仓库。","error",info["sourceId"],row)
-                        key=(pid,record["warehouse"])
+                        key=(pid, ("id", record["warehouseId"]) if record["warehouseId"] else ("name", record["warehouse"]))
                         if key in inventory_keys:
                             issue("STOCK_SNAPSHOT_OVERLAP","库存快照范围重叠",f"商品 {pid} 在仓库 {record['warehouse'] or '未指定'} 出现多次，不能把多个日期快照相加。","error",info["sourceId"],row)
                             continue
@@ -514,7 +523,7 @@ class DataSetService:
             for role in ("products","conversion"):
                 unique={}
                 for item in records[role]:
-                    pid=item["product"]
+                    pid=(item["product"], item.get("sourceSku", ""), item.get("specification", ""), item.get("sourceSystem", ""))
                     if pid in unique:
                         previous=unique[pid]
                         if any(item.get(k) not in (None,"") and previous.get(k) not in (None,"") and item.get(k)!=previous.get(k) for k in ("code","pack","basePrice","basePriceLarge")):
@@ -583,13 +592,14 @@ class DataSetService:
             for role in self.ROLES:
                 records=list(pending["records"].get(role,[]))
                 if role == "products":
-                    present = {item["product"] for item in records}
+                    present = {item["product"] + (" · " + (item.get("sourceSku") or item.get("specification")) if item.get("sourceSku") or item.get("specification") else "") + (" · " + item["sourceSystem"] if item.get("sourceSystem") else "") for item in records}
                     # Movement rows may carry their own pack size. Preserve it
                     # in the canonical master, where the existing analyzer
                     # resolves order/transit case quantities.
                     for pid, meta in pending["metadata"].items():
                         if pid not in present and meta.get("pack"):
-                            records.append({"product": pid, "name": meta.get("name", ""), "pack": meta["pack"],
+                            records.append({"product": meta["product"], "name": meta.get("name", ""), "pack": meta["pack"],
+                                            **{key:meta.get(key, "") for key in ("sourceSku", "sourceSystem", "specification")},
                                             "_origin": {"filename": "本次已选数据", "sheet": "按已选箱规归一化", "row": 0,
                                                         "sourceId": "", "role": "products", "product": pid}})
                 if not records:continue
@@ -621,7 +631,7 @@ class DataSetService:
             fd,temp_name=tempfile.mkstemp(prefix=".dataset-",suffix=".xlsx",dir=folder);os.close(fd);temp=Path(temp_name)
             try:
                 workbook.save(temp);workbook.close()
-                with temp.open("rb") as stream:os.fsync(stream.fileno())
+                with temp.open("rb+") as stream:os.fsync(stream.fileno())
                 self._verify_files(pending["staged"]["files"])
                 os.replace(temp,output)
             finally:temp.unlink(missing_ok=True)

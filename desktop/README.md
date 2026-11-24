@@ -1,17 +1,62 @@
 # 零售通桌面版开发
 
-版本配对按补丁号：Mac 奇数、Windows 紧随偶数；本轮 Mac 0.1.9 对应 Windows 0.1.10，统一功能级别 desktop-3。Mac 负责带头实现与全功能分析、覆盖测试；Windows 在 Windows 环境复用同一后端和前端，完成平台适配、对照验收与安装包。
+> 2026-11-24 GitHub同步更新：已取得并合并Windows0.1.10工程、v0.1.10-windows标签及平台技术发布记录；人工体验仍有未关闭缺陷。Windows0.2.2为desktop-4待适配目标，本机未构建或实机验收。Mac0.2.1安装包的已验收源码锚定v0.2.1-macos（fbb54cf）；后续共享Windows兼容合并不改写已交付DMG。
 
-macOS 使用 AppKit / WKWebView 原生壳，Python 后端仅监听系统分配的127.0.0.1端口；ready-file就绪后停止启动轮询。前端使用原生文件桥，所有设置持久化到应用数据，退出与父进程管道断开均回收后端。
+目标版本 Mac 0.2.1／Windows 0.2.2，功能基线 desktop-4。Mac 奇数、Windows 紧随偶数。版本号与功能清单是源码目标，不代表所有平台均已打包或通过实机验收。
 
-构建需要 Intel Mac/macOS13+、Swift5.8+、可迁移的Python3.12运行环境、openpyxl、et_xmlfile及Pillow（仅绘制构建图标）。用户安装后不需要Python或构建工具。运行：
+macOS 使用 AppKit／WKWebView 原生壳，内置 Python 仅监听系统分配的 127.0.0.1 端口。共享 server/backend/web 只维护一套业务算法。Windows 复用同一清单和同一虚构样本对照输出；已取得并保留Windows0.1.10宿主、安装/卸载和构建工程；本机没有Windows实机环境，0.2.2仍待desktop-4适配。
+
+## 构建
+
+构建需要 Intel Mac、macOS 13+、Swift 5.8+、可迁移 Python 3.12、openpyxl／et_xmlfile 和 Pillow。用户不需要 Python 或终端。
 
 ```sh
-python3 desktop/build_macos.py --python-runtime /path/to/portable-python --publish
+python3 -B desktop/build_macos.py --python-runtime /path/to/portable-python --publish
 ```
 
-或运行开发空间/prepare_delivery.py。产品交付只保留最新DMG与对应HTML说明两文件。构建缓存、.app、磁盘镜像暂存均在desktop/build，测试日志与虚构资料均在测试空间，不上传GitHub。
+编译包含 macos/Main.swift 和 macos/LifecycleSupport.swift。图标由构建脚本绘制客户指定的红色主底、白色经营折线图与数据点，生成 PNG、ICNS、ICO。产品交付仍仅最新 DMG 与对应 HTML 两文件。构建缓存、App 与中间图标位于 desktop/build，不进源码交付。
 
-测试时通过 RETAIL_LINK_TEST_ROOT 指向测试空间，隔离所有数据／导出／日志／临时目录；禁用持久WebKit数据。无该变量时使用系统用户目录。
+## 安装、升级与卸载契约
 
-当前产物仅覆盖 Intel Mac；Apple Silicon需内置arm64或universal运行环境并在相应设备原生验证。安装包用本机ad-hoc签名，Developer ID公证由正式分发阶段处理。Windows安装包由Windows环境完成，本仓库只提供共用功能协议与验收清单，不能把未执行平台标成已通过。
+DMG 可以拖拽到用户选择的实际位置，也可打开 App 后用“零售通 → 安装与升级…”选择可写目录。安装流程显示来源、实际目标和版本；复制校验、codesign 完整性核对后才发布。符号链接目录、无权限位置、其他同名应用和正在运行的目标不允许覆盖。升级从新版 DMG 打开，选择原安装目录；当前运行的旧 App 必须先退出。旧 App 保留在同目录“零售通-升级前-…”副本，恢复前先退出新版。安装不自动删除旧备份，也不变更用户业务文件。
+
+启动时 desktop-install.json 记录实际 Bundle 路径；路径以当前运行 Bundle 为准，不假定 /Applications。安装完成可立即启动、打开目标目录或完成。首次引导说明用途、三步操作、本地数据位置、原件默认只读及联网边界。
+
+卸载采用明确单选，默认普通卸载；下一步列出实际清理路径，再确认。普通仅移走当前 App；彻底卸载只移走明确白名单中的应用数据、配置、历史、缓存、日志。原件、导入副本、生成文件、exports 中的文件备份与未知文件保留。经营账本仅清理 operations/state.json，写回配置仅清理 writeback/settings.json 和 writeback/templates.json；不删除其父目录，writeback/backups 原件备份及 writeback/operations 恢复元数据始终保留。文件移入废纸篓后，结果显示成功或失败、实际移动位置和遗留项；恢复凭据写到 Documents/零售通/卸载记录。测试不对真实安装或用户资料执行卸载。
+
+## 启动与诊断
+
+前端可操作后发送：
+
+```js
+window.webkit.messageHandlers.retailLinkDesktop.postMessage({action: 'frontendReady'});
+```
+
+原生验证消息来自当前本地页面。ready-file、页面导航完成均不等于业务入口可用；总超时一直保留到 frontendReady。40 秒为错误保护上限，8 秒提示仍在等待，均不是已经测定的性能合格线。阶段日志写入 ~/Library/Logs/零售通/startup.jsonl，菜单可定位；日志含过程、版本、进程、耗时及失败阶段，不写工作簿内容或凭据。ready 后取消启动计时，不新增空闲业务轮询。
+
+## 隔离验收
+
+RETAIL_LINK_TEST_ROOT 必须指向测试空间或临时目录，隔离支持目录、导出、日志和临时目录，禁用持久 WebKit 数据。带此环境并传 --lifecycle-preview 可只打开生命周期预览、不启动业务后端。虚构目录测试：
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest discover -s 测试空间 -p test_v02_desktop.py -v
+```
+
+从仓库运行时按实际测试目录调整路径。现成 App 专项测试前先从 DMG 恢复或重建 App；不在签名包中写 pycache。
+
+## 性能测量
+
+measure_resources.py 按 PID 及其子进程采样，OS 重新托管的 WebKit／WebView 辅助进程须先核实归属，再通过 --include-pid 明确加入。不能把单个主进程截图当完整占用。示例：
+
+```sh
+python3 -B desktop/measure_resources.py --pid 1234 --label idle --version 0.2.1 --duration 60 --out /tmp/retail-idle.json
+```
+
+固定设备、系统版本、应用构建、样本和静置条件；分别记录 first（全新隔离数据）、cold（重启系统后的首轮）、warm（退出后再次启动）、idle（主界面准备后固定静置）、long-idle（固定长期静置）。脚本不代替系统重启，也不把热启动冒充冷启动。macOS 记录逐进程 RSS 合计（共享页可能重复计数）；Windows 记录 Working Set 与 Private Bytes；两者不直接当同一数值比较。CPU 来自区间累计处理器时间；磁盘读写未采集时明确为 null，需 OS 跟踪补证据。脚本不生成伪造阈值或自动判通过；先实测、再冻结各平台设备基线与回归门槛。55.4MB 主进程截图不足以判超标。
+
+## 分发边界
+
+本地构建仍仅 Intel Mac；ad-hoc 签名验证只保证包完整性，不等于 Developer ID 公证。arm64／Universal、正式公证、Windows 安装包和完整安装卸载矩阵分别验收。附件所述 Windows v0.1.10 缺陷是外部人工反馈，取得对应构建、截图和源码后再核验，不能算本机已复现或修复。
+
+
+下载发布先在目标同目录创建唯一私有暂存文件，流式复制、fsync 与哈希重读后，以 RENAME_EXCL 排他原子发布；最终文件名在完整数据就绪前不可见，源暂存文件由调用方统一清理。跨盘不直接写最终目标。若文件系统不支持排他原子重命名，明确失败并清理本次私有暂存，不退为暴露半写目标。物理 FAT/exFAT 仍需实机验证，不能仅凭强制复制测试宣称兼容通过。

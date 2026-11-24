@@ -19,6 +19,8 @@ import openpyxl
 from openpyxl.utils import column_index_from_string, get_column_letter
 from openpyxl.utils.datetime import from_excel
 
+from .product_identity import resolve_identity, digest
+
 
 ROLE_NAMES = {
     "summary": "月计划", "products": "商品规格", "conversion": "商品对照",
@@ -41,6 +43,10 @@ FIELD_ALIASES = {
     "code": ["产品代码", "商品代码", "代码", "商品编码", "产品编码", "商品id", "sku编码"],
     "name": ["产品全称", "产品名称", "商品名称", "名称"],
     "warehouse": ["仓位", "仓库", "仓库名称", "店铺", "渠道"],
+    "warehouseId": ["仓库id", "仓位id", "仓库编号"],
+    "sourceSku": ["来源sku", "sku编码", "sku", "规格id"],
+    "sourceSystem": ["来源系统", "来源平台"],
+    "specification": ["商品规格", "销售规格", "规格"],
     "pack": ["箱规", "转化率", "转换率", "每箱数量", "装箱数", "包装数量"],
     "plan": ["计划量", "月计划", "计划金额", "月计划金额", "目标", "计划数量", "计划"],
     "stockLarge": ["库存数量（大单位）", "大单位库存", "箱数", "库存箱数"],
@@ -55,17 +61,19 @@ FIELD_ALIASES = {
 }
 FIELD_LABELS = {
     "product": "商品简称 / 标识", "code": "来源商品编码", "name": "商品名称", "pack": "箱规 / 转换率",
+    "warehouseId": "仓库ID", "sourceSku": "来源SKU", "sourceSystem": "来源系统", "specification": "规格",
     "warehouse": "仓库 / 渠道", "plan": "月计划", "stockLarge": "库存（大单位）", "stockSmall": "库存（小单位）",
     "basePriceLarge": "基准价（大单位）", "basePrice": "基准单价", "supplyPrice": "供货单价",
     "date": "日期（长表）", "quantity": "数量（长表 / 合计）", "amount": "源金额",
     "supplyAmount": "源供价金额", "amountProduct": "辅助汇总区商品标识",
 }
-COMMON = ["product", "code", "warehouse", "date", "quantity", "basePrice", "supplyPrice", "amount", "supplyAmount", "amountProduct"]
+IDENTITY_FIELDS = ["warehouseId", "sourceSku", "sourceSystem", "specification"]
+COMMON = ["product", "code", "warehouse", *IDENTITY_FIELDS, "date", "quantity", "basePrice", "supplyPrice", "amount", "supplyAmount", "amountProduct"]
 ROLE_FIELDS = {
-    "summary": ["product", "name", "plan"],
-    "products": ["product", "code", "name", "pack", "basePriceLarge", "basePrice"],
-    "conversion": ["product", "code", "name", "pack", "basePriceLarge", "basePrice"],
-    "inventory": ["product", "code", "name", "warehouse", "pack", "stockLarge", "stockSmall", "basePriceLarge", "basePrice", "amount"],
+    "summary": ["product", "name", "plan", *IDENTITY_FIELDS],
+    "products": ["product", "code", "name", "pack", "basePriceLarge", "basePrice", *IDENTITY_FIELDS],
+    "conversion": ["product", "code", "name", "pack", "basePriceLarge", "basePrice", *IDENTITY_FIELDS],
+    "inventory": ["product", "code", "name", "warehouse", "pack", "stockLarge", "stockSmall", "basePriceLarge", "basePrice", "amount", "date", *IDENTITY_FIELDS],
     **{role: COMMON[:] for role in ["sales", "outbound", "orders", "transit", "loss"]},
 }
 DEFAULTS = {
@@ -400,7 +408,18 @@ def analyze_workbook(path, config):
         raise ValueError("金额口径只能选择 source 或 calculated。")
     formulas, wb = _load(path)
     issues = _Issues()
+    catalog = options.get("productCatalog", [])
+    if not isinstance(catalog, list) or len(catalog) > 20000:
+        raise ValueError("商品关联配置应为列表，最多20,000条。")
     meta = {}
+    identity_cache = {}
+    catalog_index = defaultdict(list)
+    for alias in catalog:
+        if not isinstance(alias, dict):
+            raise ValueError("商品关联配置含无效条目。")
+        catalog_index[_text(alias.get("sourceProduct"))].append(alias)
+        if _text(alias.get("product")) != _text(alias.get("sourceProduct")):
+            catalog_index[_text(alias.get("product"))].append(alias)
     sources = []
     role_data = {}
     date_coverage = {}
@@ -433,15 +452,41 @@ def analyze_workbook(path, config):
         c = cols.get(key)
         return f"{sheet.title}!{get_column_letter(c)}{row}" if c else f"{sheet.title}!第{row}行"
 
+    def identify(sheet, row, cols):
+        cache_key = (sheet.title, row, tuple(sorted(cols.items())))
+        if cache_key not in identity_cache:
+            raw = _text(get(sheet, row, cols, "product"))
+            identity = resolve_identity(catalog_index.get(raw, []), raw, _text(get(sheet, row, cols, "warehouse")),
+                _text(get(sheet, row, cols, "specification")), _text(get(sheet, row, cols, "sourceSku")),
+                _text(get(sheet, row, cols, "warehouseId")), _text(get(sheet, row, cols, "sourceSystem")))
+            pid = identity["product"]
+            if identity["identityStatus"] != "mapped":
+                qualifier = identity["sourceSku"] or identity["specification"]
+                if qualifier:
+                    pid = raw + " · " + qualifier
+                elif identity["identityStatus"] == "ambiguous":
+                    pid = raw + " · 待关联"
+                if identity["sourceSystem"]:
+                    pid += " · " + identity["sourceSystem"]
+            identity["analysisId"] = pid
+            if identity["identityStatus"] == "ambiguous":
+                issues.add("AMBIGUOUS_PRODUCT_IDENTITY", "商品关联缺少唯一规格或仓库", "来源ID存在多个候选，当前行单独列为待核对，不自动选定关联。", "error", sheet.title, "第" + str(row) + "行", pid)
+            identity_cache[cache_key] = identity
+        return identity_cache[cache_key]
+
     def ensure(pid):
         if pid not in meta:
-            meta[pid] = {"id": pid, "name": pid, "code": "", "pack": None, "warehouse": "", "basePrice": None, "basePriceLarge": None, "sources": {}, "codes": {}}
+            meta[pid] = {"id": pid, "name": pid, "code": "", "pack": None, "warehouse": "", "basePrice": None, "basePriceLarge": None, "sources": {}, "codes": {}, "warehouseStocks": {}, "warehouseSales": {}, "identityLinks": [], "specification": ""}
         return meta[pid]
 
     def update_meta(pid, sheet, row, cols, role):
         item = ensure(pid)
+        identity = identify(sheet, row, cols)
+        item["specification"] = identity["specification"] or item["specification"]
+        if identity not in item["identityLinks"]:
+            item["identityLinks"].append(identity)
         for field in ("name", "code", "warehouse"):
-            val = _text(get(sheet, row, cols, field))
+            val = identity["warehouse"] if field == "warehouse" else (identity["name"] if field == "name" and identity["identityStatus"] == "mapped" else _text(get(sheet, row, cols, field)))
             if val:
                 if field == "code":
                     if role in ("sales", "outbound"):
@@ -479,13 +524,20 @@ def analyze_workbook(path, config):
         count = 0
         seen = set()
         for row in _row_numbers(sheet, hr + 1):
-            pid = _text(get(sheet, row, cols, "product"))
-            if not pid or _total_label(pid):
+            raw_pid = _text(get(sheet, row, cols, "product"))
+            if not raw_pid or _total_label(raw_pid):
                 continue
+            pid = identify(sheet, row, cols)["analysisId"]
             count += 1
             item = update_meta(pid, sheet, row, cols, role)
             if pid in seen and role in ("products", "conversion", "summary"):
                 issues.add("DUPLICATE_PRODUCT", "商品标识重复", f"{ROLE_NAMES[role]}出现重复商品 {pid}，请确认是否需要区分规格。", "error", sheet.title, get_column_letter(cols["product"]) + str(row), pid)
+                if role == "summary":
+                    # Identical duplicate aliases describe one target. A
+                    # conflicting target cannot be resolved by row order.
+                    if _number(get(sheet, row, cols, "plan")) != item.get("plan"):
+                        item["plan"] = None
+                    continue
             seen.add(pid)
             if role == "summary":
                 val = _number(get(sheet, row, cols, "plan"))
@@ -511,6 +563,20 @@ def analyze_workbook(path, config):
                 if source_amount is not None and calculated is not None and abs(source_amount - calculated) > .02:
                     issues.add("AMOUNT_MISMATCH", "库存金额与数量不一致", f"商品 {pid} 源金额 {source_amount:g}，按数量与价格计算为 {calculated:g}。", "warning", sheet.title, get_column_letter(cols["amount"]) + str(row), pid)
                 amount = source_amount if options["amountMode"] == "source" and source_amount is not None else calculated
+                identity = identify(sheet, row, cols)
+                location_key = ("id", identity["warehouseId"]) if identity["warehouseId"] else ("name", identity["warehouse"])
+                if location_key in item["warehouseStocks"]:
+                    issues.add("STOCK_SNAPSHOT_OVERLAP", "同仓库存范围重叠", "同一标准商品与仓库出现多条库存快照，后续重复项未相加，请核对来源。", "error", sheet.title, "第" + str(row) + "行", pid)
+                    continue
+                stock = item["warehouseStocks"].setdefault(location_key, {
+                    "warehouseId": identity["warehouseId"], "warehouse": identity["warehouse"],
+                    "warehouseIdentityStatus": "identified" if identity["warehouseId"] else "unknown_id",
+                    "stockSmall": None, "stockLarge": None, "stockAmount": None,
+                    "snapshotDate": (_date(get(sheet, row, cols, "date"), wb.epoch, year).isoformat() if _date(get(sheet, row, cols, "date"), wb.epoch, year) else None), "sources": []})
+                stock["sources"].append({"sheet": sheet.title, "row": row, "identity": identity})
+                for metric, value in (("stockLarge", large), ("stockSmall", small), ("stockAmount", amount)):
+                    if value is not None:
+                        stock[metric] = (stock[metric] or 0) + value
                 for key, value in (("stockLarge", large), ("stockSmall", small), ("stockAmount", amount)):
                     if value is not None:
                         item[key] = (item.get(key) or 0) + value
@@ -549,11 +615,13 @@ def analyze_workbook(path, config):
         for row in _row_numbers(sheet, hr + 1):
             key = _text(get(sheet, row, cols, "product"))
             if key and not _total_label(key):
-                product_counts[key] += 1
+                product_counts[identify(sheet, row, cols)["analysisId"]] += 1
         for row in _row_numbers(sheet, hr + 1):
-            pid = _text(get(sheet, row, cols, "product"))
-            if not pid or _total_label(pid):
+            raw_pid = _text(get(sheet, row, cols, "product"))
+            if not raw_pid or _total_label(raw_pid):
                 continue
+            identity = identify(sheet, row, cols)
+            pid = identity["analysisId"]
             item = update_meta(pid, sheet, row, cols, role)
             if wide:
                 events = []
@@ -582,7 +650,7 @@ def analyze_workbook(path, config):
                 events = [(d, qty, get_column_letter(cols.get("quantity", 1)) + str(row))]
             count += len(events)
             if aux_col:
-                amount_row = aux.get(pid)
+                amount_row = aux.get(raw_pid)
             else:
                 amount_row = row
             def amount_value(field):
@@ -643,6 +711,12 @@ def analyze_workbook(path, config):
                 issues.add("SOURCE_SCOPE_FILTERED", "源金额范围大于统计范围", f"商品 {pid} 的{ROLE_NAMES[role]}源金额包含截止日期外或其他月份数据，本次金额按所选明细与单价重算。", "info", sheet.title, amount_cell, pid)
             if pack is None and role in ("orders", "transit"):
                 issues.add("MISSING_PACK", "缺少箱规，数量无法统一", f"商品 {pid} 的{ROLE_NAMES[role]}保留原单位，统一小单位数量暂不可用。", "warning", sheet.title, "", pid)
+            if role == "sales":
+                location_key = ("id", identity["warehouseId"]) if identity["warehouseId"] else ("name", identity["warehouse"])
+                location_sales = item["warehouseSales"].setdefault(location_key, defaultdict(float))
+                for d, qty, _ in selected:
+                    if pack is not None:
+                        location_sales[d.isoformat()] += qty * pack
             grouped[pid].append({"quantity": quantity * pack if pack is not None else None,
                                  "rawQuantity": quantity, "amount": amount, "supplyAmount": supply_amount,
                                  "daily": {d.isoformat(): q * pack if pack is not None else None for d, q, _ in selected},
@@ -689,7 +763,8 @@ def analyze_workbook(path, config):
              "transitSmall": transit.get("quantity"), "transitAmount": transit.get("amount"), "salesQuantity": sales.get("quantity"),
              "yesterdaySales": sales.get("daily", {}).get((cutoff - timedelta(days=1)).isoformat()), "averageSales": None, "coverageDays": None,
              "outboundQuantity": outbound.get("quantity"), "outboundAmount": outbound.get("amount"), "supplyAmount": outbound.get("supplyAmount"),
-             "lossAmount": loss.get("amount"), "lossQuantity": loss.get("quantity"), "sources": dict(item["sources"])}
+             "lossAmount": loss.get("amount"), "lossQuantity": loss.get("quantity"), "sources": dict(item["sources"]),
+             "specification": item["specification"], "identityLinks": item["identityLinks"], "warehouseStocks": []}
         if required_sales_days and all(d.isoformat() in sales.get("daily", {}) for d in required_sales_days):
             p["averageSales"] = sum(sales["daily"][d.isoformat()] for d in required_sales_days) / average_days
         if sales and p["averageSales"] is None:
@@ -735,6 +810,24 @@ def analyze_workbook(path, config):
             p["coverageDays"] = p["stockSmall"] / p["averageSales"]
             if p["coverageDays"] < transit_days:
                 issues.add("LOW_STOCK", "现货覆盖天数较短", f"商品 {pid} 现货预计覆盖 {p['coverageDays']:.1f} 天，短于当前跟踪天数 {transit_days} 天，请确认货源和补货安排。", "warning", product=pid)
+        for location_key, raw_stock in item["warehouseStocks"].items():
+            stock = copy.deepcopy(raw_stock)
+            stock.update(averageSales=None, coverageDays=None, salesBasis="mapped_sales")
+            daily_sales = item["warehouseSales"].get(location_key, {})
+            complete = all(day.isoformat() in daily_sales for day in required_sales_days)
+            if options.get("inventoryComparable") and complete:
+                stock["averageSales"] = sum(daily_sales[day.isoformat()] for day in required_sales_days) / average_days
+                if stock["stockSmall"] is not None and stock["averageSales"] > 0:
+                    stock["coverageDays"] = stock["stockSmall"] / stock["averageSales"]
+            stock["coverageReason"] = "按同仓完整销量计算" if stock["coverageDays"] is not None else "同仓库存池或完整销量待确认"
+            p["warehouseStocks"].append(stock)
+        p["warehouseStocks"].sort(key=lambda row: (row["warehouseId"], row["warehouse"]))
+        if p["warehouseStocks"]:
+            p["warehouse"] = "、".join(dict.fromkeys(row["warehouse"] or "未指定仓库" for row in p["warehouseStocks"]))
+        # A total stock divided by unallocated platform sales is not warehouse
+        # coverage. Preserve old single-pool behavior only for one stock pool.
+        if len(p["warehouseStocks"]) > 1:
+            p["coverageDays"] = None
         products.append(p)
 
     # Scan source errors without treating a cached result as a working formula.
@@ -763,7 +856,7 @@ def analyze_workbook(path, config):
                     "partialMetrics": [key for key in ("plan", "completed", "stockAmount", "outboundAmount", "lossAmount") if any(p[key] is None for p in products)]})
     # Ratios need matching populations. A known numerator must not be divided by
     # a denominator that silently excludes products with missing source data.
-    if any(p["plan"] is None or p["completed"] is None for p in products):
+    if any(p["plan"] is None or p["plan"] <= 0 or p["completed"] is None for p in products):
         summary["achievement"] = None
         summary["targetGap"] = None
     if any(p["outboundAmount"] is None or p["supplyAmount"] is None for p in products):

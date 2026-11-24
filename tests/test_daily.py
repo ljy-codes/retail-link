@@ -8,14 +8,14 @@ import json
 from pathlib import Path
 import subprocess
 import sys
-import tempfile
 import unittest
 
 import openpyxl
+from tests.temp_support import temporary_directory
 
 PROJECT = Path(__file__).resolve().parents[1]
 TEST_ROOT = Path(__file__).resolve().parent
-DEV = PROJECT
+DEV = PROJECT / "开发空间"
 sys.path.insert(0, str(DEV))
 
 
@@ -51,7 +51,7 @@ class DailyRecordsTests(unittest.TestCase):
         cls.module = importlib.import_module("backend.daily_records")
 
     def setUp(self):
-        self.temporary = tempfile.TemporaryDirectory(prefix="每日记录自测-", dir=TEST_ROOT)
+        self.temporary = temporary_directory(prefix="每日记录自测-", directory=TEST_ROOT)
         self.path = Path(self.temporary.name)
         self.data = self.path / "persistent"
         self.workbooks = {}

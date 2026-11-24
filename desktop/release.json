@@ -2,6 +2,7 @@
   "featureLevel": "desktop-3",
   "macVersion": "0.1.9",
   "windowsVersion": "0.1.10",
+  "pairedMacVersion": "0.1.9",
   "minimumMacOS": "13.0",
   "features": [
     "reviewed_import",

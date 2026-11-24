@@ -1,7 +1,9 @@
 {
   "name": "零售通",
-  "version": "0.1.9",
+  "version": "0.1.10",
+  "platform": "windows",
   "featureLevel": "desktop-3",
-  "pairedWindowsVersion": "0.1.10",
-  "releaseDate": "2026-11-23"
+  "pairedMacVersion": "0.1.9",
+  "buildStatus": "built-verified",
+  "releaseDate": "2026-11-24"
 }

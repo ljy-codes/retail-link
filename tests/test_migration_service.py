@@ -9,11 +9,12 @@ from pathlib import Path
 import sqlite3
 import stat
 import sys
-import tempfile
 import unittest
 from unittest.mock import patch
 import warnings
 import zipfile
+
+from tests.temp_support import temporary_directory
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -25,7 +26,7 @@ def sha(path):
 
 class MigrationTests(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory(prefix="migration-", dir=Path(__file__).parent)
+        self.temp = temporary_directory(prefix="migration-", directory=Path(__file__).parent)
         self.root = Path(self.temp.name)
         self.origin = self.root / "origin"
         self.output = self.root / "output"
@@ -49,18 +50,21 @@ class MigrationTests(unittest.TestCase):
             "id": identifier, "filename": "业务数据.xlsx", "summary": {"plan": 1000},
             "products": [{"id": "001", "name": "虚构商品"}],
             "sourceInfo": {"path": str(self.root / "outside-source.xlsx"), "sha256": "e" * 64},
-        }, ensure_ascii=False))
-        (deleted / (identifier + "9.json")).write_text(json.dumps({"id": identifier + "9", "summary": {}, "products": []}))
+        }, ensure_ascii=False), encoding="utf-8")
+        (deleted / (identifier + "9.json")).write_text(
+            json.dumps({"id": identifier + "9", "summary": {}, "products": []}), encoding="utf-8")
         store = self.daily_module.DailyStore(directory)
         store.save({"date": "2026-11-20", "product": "001", "name": "虚构商品", "shop": "测试店", "price": price, "salesQuantity": 3})
         prefs = {"version": 1, "profiles": [{"name": "分析口径", "config": {"targetRate": .85}}],
                  "appearance": {"mode": "dark", "palette": "focus", "glass": False},
                  "dailyMapping": {"sheet": "表一", "columns": {"product": "A", "price": "B"}}}
-        (directory / "preferences.json").write_text(json.dumps(prefs, ensure_ascii=False))
+        (directory / "preferences.json").write_text(
+            json.dumps(prefs, ensure_ascii=False), encoding="utf-8")
         logs = directory / "logs"
         logs.mkdir(exist_ok=True)
         (logs / "operations.jsonl").write_text(json.dumps({"operation": "export", "operationId": "untrusted-rollback",
-            "target": str(self.root / "do-not-change.xlsx"), "result": "success", "time": "2026-11-20T12:00:00+08:00"}) + "\n")
+            "target": str(self.root / "do-not-change.xlsx"), "result": "success", "time": "2026-11-20T12:00:00+08:00"}) + "\n",
+            encoding="utf-8")
         return prefs
 
     def _bundle(self, name="迁移.zip"):

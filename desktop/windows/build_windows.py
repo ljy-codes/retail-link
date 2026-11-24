@@ -1,0 +1,477 @@
+"""Build the self-contained Windows app and a per-user installer."""
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+from pathlib import Path
+import shutil
+import site
+import struct
+import subprocess
+import sys
+import tempfile
+import time
+import urllib.request
+import zipfile
+import zlib
+
+WINDOWS = Path(__file__).resolve().parent
+DESKTOP = WINDOWS.parent
+DEV = DESKTOP.parent
+ROOT = DEV
+BUILD = DESKTOP / "build" / "windows"
+RELEASE = json.loads((DESKTOP / "release.json").read_text(encoding="utf-8"))
+PYTHON_URL = "https://www.python.org/ftp/python/3.12.10/python-3.12.10-embed-amd64.zip"
+UTF8_BOM = b"\xef\xbb\xbf"
+
+
+def validate_release(release):
+    if not isinstance(release, dict):
+        raise ValueError("发布配置必须是 JSON 对象。")
+    if release.get("featureLevel") != "desktop-3":
+        raise ValueError("Windows 发版必须复用 desktop-3 功能基线。")
+    mac = _version(release.get("macVersion"), "macVersion")
+    windows = _version(release.get("windowsVersion"), "windowsVersion")
+    if mac[0:2] != windows[0:2]:
+        raise ValueError("Mac 与 Windows 的主次版本必须一致。")
+    if mac[2] % 2 != 1:
+        raise ValueError("Mac 补丁版本必须为奇数。")
+    if windows[2] != mac[2] + 1 or windows[2] % 2 != 0:
+        raise ValueError("Windows 补丁版本必须紧跟 Mac，且为偶数。")
+    return release
+
+
+def windows_metadata(release):
+    checked = validate_release(release)
+    return {
+        "name": "零售通",
+        "version": checked["windowsVersion"],
+        "platform": "windows",
+        "featureLevel": checked["featureLevel"],
+        "pairedMacVersion": checked["macVersion"],
+    }
+
+
+def forbidden_payload_path(relative):
+    path = Path(relative)
+    parts = [part.lower() for part in path.parts]
+    forbidden_names = {
+        "__pycache__", "本地数据", "原始资料", "生成文件", "测试空间",
+        ".git", ".pytest_cache", ".mypy_cache", "node_modules", "desktop",
+    }
+    if any(part in forbidden_names for part in parts):
+        return True
+    if "windows" in parts and "desktop" in parts:
+        return True
+    if path.suffix.lower() in {
+        ".pyc", ".pyo", ".xlsx", ".xlsm", ".xls", ".sqlite3", ".sqlite",
+        ".db", ".jsonl", ".csv", ".log", ".part", ".tmp",
+    }:
+        return True
+    if any(part.startswith(("每日记录自测-", "价量适配自测-", "dataset-", "daily-export-"))
+           for part in path.parts):
+        return True
+    return False
+
+
+def ensure_powershell_utf8_bom(data):
+    return data if data.startswith(UTF8_BOM) else UTF8_BOM + data
+
+
+def powershell_script_bytes(source):
+    return ensure_powershell_utf8_bom(Path(source).read_bytes())
+
+
+def _version(value, field):
+    if not isinstance(value, str):
+        raise ValueError(f"{field} 缺失。")
+    pieces = value.split(".")
+    if len(pieces) != 3 or not all(piece.isdigit() for piece in pieces):
+        raise ValueError(f"{field} 必须是三段数字版本。")
+    return tuple(int(piece) for piece in pieces)
+
+
+def run(*args, cwd=ROOT, env=None):
+    command = [str(arg) for arg in args]
+    print(">", subprocess.list2cmdline(command), flush=True)
+    subprocess.run(command, cwd=cwd, check=True, env=env)
+
+
+def copy_tree(source, destination):
+    shutil.copytree(
+        source,
+        destination,
+        dirs_exist_ok=True,
+        ignore=shutil.ignore_patterns(
+            "__pycache__", "*.pyc", "*.pyo", ".DS_Store", "Thumbs.db",
+            "*.xlsx", "*.xlsm", "*.xls", "*.sqlite3", "*.db", "*.jsonl",
+            "*.csv", "*.log", "*.tmp", "*.part",
+        ),
+    )
+
+
+def find_dotnet():
+    dotnet = shutil.which("dotnet")
+    if dotnet:
+        return dotnet
+    candidate = Path(r"C:\Program Files\dotnet\dotnet.exe")
+    if candidate.is_file():
+        return str(candidate)
+    raise RuntimeError("未找到 .NET SDK；请安装 .NET 10 SDK。")
+
+
+def find_site_packages(explicit=None):
+    candidates = []
+    if explicit:
+        candidates.append(Path(explicit))
+    import sysconfig
+    candidates.append(Path(sysconfig.get_paths().get("purelib", "")))
+    user_site = site.getusersitepackages()
+    if user_site:
+        candidates.append(Path(user_site))
+    candidates.extend(Path(entry) for entry in sys.path if entry)
+    for candidate in candidates:
+        if (candidate / "openpyxl").is_dir() and (candidate / "et_xmlfile").is_dir():
+            return candidate
+    raise RuntimeError("未找到 openpyxl 与 et_xmlfile；请通过 --python-packages 指定目录。")
+
+
+def download_runtime(destination, source=None):
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if source:
+        shutil.copy2(source, destination)
+        return destination
+    if destination.is_file() and destination.stat().st_size > 1_000_000:
+        return destination
+    request = urllib.request.Request(PYTHON_URL, headers={"User-Agent": "RetailLink-Windows-Build/1.0"})
+    print(f"下载 {PYTHON_URL}", flush=True)
+    with urllib.request.urlopen(request, timeout=120) as response, destination.open("wb") as stream:
+        shutil.copyfileobj(response, stream)
+    if destination.stat().st_size < 1_000_000:
+        destination.unlink(missing_ok=True)
+        raise RuntimeError("Python embeddable 下载不完整。")
+    return destination
+
+
+def prepare_runtime(runtime_zip, site_packages, destination):
+    with zipfile.ZipFile(runtime_zip) as archive:
+        archive.extractall(destination)
+    pth = destination / "python312._pth"
+    if not pth.is_file():
+        raise RuntimeError("Python embeddable 缺少 python312._pth。")
+    pth.write_text(
+        "python312.zip\r\n.\r\nLib\\site-packages\r\nimport site\r\n",
+        encoding="utf-8",
+    )
+    packages = destination / "Lib" / "site-packages"
+    packages.mkdir(parents=True, exist_ok=True)
+    for name in ("openpyxl", "et_xmlfile"):
+        copy_tree(site_packages / name, packages / name)
+    for pattern in ("openpyxl-*.dist-info", "et_xmlfile-*.dist-info"):
+        for metadata in site_packages.glob(pattern):
+            copy_tree(metadata, packages / metadata.name)
+    licenses = DESKTOP / "licenses"
+    if licenses.is_dir():
+        copy_tree(licenses, destination / "licenses")
+    python = destination / "python.exe"
+    if not python.is_file():
+        raise RuntimeError("内置 Python 解压失败。")
+    env = os.environ.copy()
+    env.pop("PYTHONHOME", None)
+    env.pop("PYTHONPATH", None)
+    env["PYTHONNOUSERSITE"] = "1"
+    try:
+        run(python, "-I", "-B", "-c",
+            "import openpyxl,et_xmlfile,sqlite3,ssl,hashlib,zlib;"
+            "print(openpyxl.__version__)", env=env)
+    except subprocess.CalledProcessError as exc:
+        raise RuntimeError("内置 Python/openpyxl 自检失败。") from exc
+
+
+def build_app(dotnet, version, destination):
+    if destination.exists():
+        shutil.rmtree(destination)
+    destination.mkdir(parents=True)
+    run(
+        dotnet, "publish", WINDOWS / "app" / "RetailLink.Windows.csproj",
+        "-c", "Release", "-r", "win-x64", "--self-contained", "true",
+        "-p:PublishSingleFile=true",
+        "-p:IncludeNativeLibrariesForSelfExtract=true",
+        "-p:EnableCompressionInSingleFile=true",
+        "-p:DebugType=None", "-p:DebugSymbols=false",
+        f"-p:Version={version}", f"-p:FileVersion={version}.0",
+        f"-p:AssemblyVersion={version}.0", "-o", destination,
+    )
+    executable = destination / "零售通.exe"
+    if not executable.is_file():
+        raise RuntimeError("应用发布未生成 零售通.exe。")
+    for path in destination.iterdir():
+        if path.name not in {"零售通.exe"}:
+            if path.is_dir():
+                shutil.rmtree(path)
+            else:
+                path.unlink()
+
+
+def build_payload(version, app_publish, runtime_zip, site_packages):
+    payload = BUILD / "payload"
+    if payload.exists():
+        shutil.rmtree(payload)
+    payload.mkdir(parents=True)
+    shutil.copy2(app_publish / "零售通.exe", payload / "零售通.exe")
+    app = payload / "app"
+    app.mkdir()
+    shutil.copy2(DEV / "server.py", app / "server.py")
+    for name in ("backend", "web"):
+        copy_tree(DEV / name, app / name)
+    shutil.copy2(DESKTOP / "使用说明.html", app / "使用说明.html")
+    metadata = windows_metadata(RELEASE)
+    metadata["architecture"] = "x64"
+    (app / "版本.json").write_text(
+        json.dumps(metadata, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    (app / "功能清单.json").write_text(
+        json.dumps(RELEASE["features"], ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    prepare_runtime(runtime_zip, site_packages, payload / "runtime")
+    uninstaller_source = WINDOWS / "uninstall" / "uninstall.ps1"
+    uninstaller_target = payload / "uninstall.ps1"
+    uninstaller_target.write_bytes(powershell_script_bytes(uninstaller_source))
+    shutil.copystat(uninstaller_source, uninstaller_target)
+    for path in payload.rglob("*"):
+        if path.is_file():
+            relative = path.relative_to(payload)
+            if forbidden_payload_path(relative):
+                raise RuntimeError(f"载荷包含禁止文件：{relative.as_posix()}")
+    return payload
+
+
+def smoke_backend(payload):
+    smoke = BUILD / "smoke"
+    if smoke.exists():
+        shutil.rmtree(smoke)
+    data = smoke / "data"
+    original = smoke / "original"
+    export = smoke / "export"
+    for path in (data, original, export):
+        path.mkdir(parents=True)
+    ready = smoke / "ready.json"
+    python = payload / "runtime" / "python.exe"
+    app = payload / "app"
+    env = os.environ.copy()
+    env.pop("PYTHONHOME", None)
+    env.pop("PYTHONPATH", None)
+    env["PYTHONNOUSERSITE"] = "1"
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
+    env["PYTHONUTF8"] = "1"
+    process = subprocess.Popen(
+        [str(python), "-B", str(app / "server.py"), "--desktop", "--parent-stdin", "--port", "0",
+         "--data-dir", str(data), "--original-dir", str(original), "--export-dir", str(export),
+         "--ready-file", str(ready)],
+        cwd=app, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        env=env,
+    )
+    try:
+        deadline = time.time() + 40
+        while time.time() < deadline:
+            if process.poll() is not None:
+                output = process.stdout.read().decode("utf-8", "replace") if process.stdout else ""
+                raise RuntimeError(f"打包后端提前退出：\n{output}")
+            if ready.is_file():
+                payload_data = json.loads(ready.read_text(encoding="utf-8"))
+                if payload_data.get("pid") != process.pid:
+                    raise RuntimeError("打包后端 PID 校验失败。")
+                if payload_data.get("version") != windows_metadata(RELEASE)["version"]:
+                    raise RuntimeError("打包后端版本校验失败。")
+                from urllib.error import HTTPError
+                from urllib.request import urlopen
+                with urlopen(payload_data["url"] + "/api/health", timeout=10) as response:
+                    health = json.loads(response.read().decode("utf-8"))
+                if health.get("desktop") is not True or health.get("version") != payload_data["version"]:
+                    raise RuntimeError("打包后端健康检查失败。")
+                # Exercise a real backend import, not only the dependency-free health route.
+                with urlopen(payload_data["url"] + "/api/import/templates", timeout=10) as response:
+                    templates = json.loads(response.read().decode("utf-8"))
+                if not isinstance(templates.get("templates"), list):
+                    raise RuntimeError("打包后端的业务模块检查失败。")
+                try:
+                    urlopen(payload_data["url"] + "/api/sample", timeout=10)
+                except HTTPError as error:
+                    if error.code != 400:
+                        raise RuntimeError(f"打包后端缺少样例时返回了异常状态：{error.code}") from error
+                    message = json.loads(error.read().decode("utf-8")).get("error", "")
+                    if "未附带样例" not in message:
+                        raise RuntimeError("打包后端缺少样例时未返回可识别提示。") from error
+                else:
+                    raise RuntimeError("打包后端缺少样例时未返回 400。")
+                return
+            time.sleep(0.1)
+        raise RuntimeError("打包后端启动超时。")
+    finally:
+        if process.stdin:
+            process.stdin.close()
+        try:
+            process.wait(timeout=8)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=5)
+
+
+def zip_payload(payload, destination):
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.unlink(missing_ok=True)
+    files = sorted(path for path in payload.rglob("*") if path.is_file())
+    with zipfile.ZipFile(destination, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
+        for path in files:
+            relative = path.relative_to(payload).as_posix()
+            info = zipfile.ZipInfo(relative, date_time=(2026, 1, 1, 0, 0, 0))
+            info.compress_type = zipfile.ZIP_DEFLATED
+            info.external_attr = 0o100644 << 16
+            archive.writestr(info, path.read_bytes(), compresslevel=9)
+    return destination
+
+
+def build_installer(dotnet, version, payload_zip, destination):
+    if destination.exists():
+        shutil.rmtree(destination)
+    destination.mkdir(parents=True)
+    run(
+        dotnet, "publish", WINDOWS / "installer" / "RetailLink.Setup.csproj",
+        "-c", "Release", "-r", "win-x64", "--self-contained", "true",
+        "-p:PublishSingleFile=true",
+        "-p:IncludeNativeLibrariesForSelfExtract=true",
+        "-p:EnableCompressionInSingleFile=true",
+        "-p:DebugType=None", "-p:DebugSymbols=false",
+        f"-p:Version={version}", f"-p:FileVersion={version}.0",
+        f"-p:AssemblyVersion={version}.0",
+        f"-p:PayloadPath={payload_zip.resolve()}",
+        "-o", destination,
+    )
+    source = destination / "RetailLink.Setup.exe"
+    if not source.is_file():
+        raise RuntimeError("安装程序发布失败。")
+    final = destination / f"零售通-v{version}-windows-x64-setup.exe"
+    source.replace(final)
+    for path in destination.iterdir():
+        if path != final:
+            if path.is_dir():
+                shutil.rmtree(path)
+            else:
+                path.unlink()
+    return final
+
+
+def publish(delivery, installer):
+    staging = BUILD / "delivery"
+    if staging.exists():
+        shutil.rmtree(staging)
+    staging.mkdir(parents=True)
+    version = windows_metadata(RELEASE)["version"]
+    shutil.copy2(installer, staging / installer.name)
+    shutil.copy2(DESKTOP / "使用说明.html", staging / f"零售通-v{version}-使用说明.html")
+    if len(list(staging.iterdir())) != 2:
+        raise RuntimeError("Windows 交付目录必须仅有安装包和使用说明。")
+    delivery = delivery.resolve()
+    allowed = {ROOT.resolve(), (ROOT / "产品交付").resolve()}
+    if delivery not in allowed:
+        raise RuntimeError("交付目录必须是仓库根目录或 产品交付。")
+    destination = delivery if delivery.name == "产品交付" else delivery / "产品交付"
+    if destination.exists():
+        shutil.rmtree(destination)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(staging, destination)
+    for path in sorted(destination.iterdir()):
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        print(f"{path.name}\t{path.stat().st_size}\t{digest}")
+    return destination
+
+
+def write_icon(path):
+    size = 256
+    pixels = bytearray([0, 0, 0, 0] * size * size)
+
+    def set_pixel(x, y, color):
+        if 0 <= x < size and 0 <= y < size:
+            index = (y * size + x) * 4
+            pixels[index:index + 4] = bytes(color)
+
+    def rectangle(x0, y0, x1, y1, radius, color):
+        for y in range(max(0, y0), min(size, y1 + 1)):
+            for x in range(max(0, x0), min(size, x1 + 1)):
+                cx = min(max(x, x0 + radius), x1 - radius)
+                cy = min(max(y, y0 + radius), y1 - radius)
+                if (x - cx) ** 2 + (y - cy) ** 2 <= radius ** 2:
+                    set_pixel(x, y, color)
+
+    rectangle(15, 15, 240, 240, 48, (24, 40, 56, 255))
+    rectangle(40, 86, 216, 204, 18, (34, 156, 157, 255))
+    rectangle(54, 54, 200, 110, 20, (156, 227, 220, 255))
+    for x, y, top in ((72, 148, 190), (113, 124, 190), (154, 100, 190)):
+        rectangle(x, y, x + 31, 190, 5, (243, 250, 250, 255))
+    rectangle(x, y, x + 31, 190, 5, (243, 250, 250, 255))
+    rectangle(x, y, x + 31, 190, 5, (243, 250, 250, 255))
+
+    raw = bytearray()
+    for row in range(size):
+        raw.append(0)
+        raw.extend(pixels[row * size * 4:(row + 1) * size * 4])
+
+    def chunk(kind, data):
+        return (struct.pack(">I", len(data)) + kind + data
+                + struct.pack(">I", zlib.crc32(kind + data) & 0xFFFFFFFF))
+
+    png = (b"\x89PNG\r\n\x1a\n"
+           + chunk(b"IHDR", struct.pack(">IIBBBBB", size, size, 8, 6, 0, 0, 0))
+           + chunk(b"IDAT", zlib.compress(bytes(raw), 9))
+           + chunk(b"IEND", b""))
+    ico = (struct.pack("<HHH", 0, 1, 1)
+           + struct.pack("<BBBBHHII", 0, 0, 0, 0, 1, 32, len(png), 22)
+           + png)
+    path.write_bytes(ico)
+
+
+def clean_build():
+    build_root = DESKTOP / "build"
+    if build_root.exists():
+        shutil.rmtree(build_root)
+
+
+def main():
+    validate_release(RELEASE)
+    parser = argparse.ArgumentParser(description="构建零售通 Windows 安装包")
+    parser.add_argument("--python-runtime-zip", type=Path)
+    parser.add_argument("--python-packages", type=Path)
+    parser.add_argument("--dotnet", default=None)
+    parser.add_argument("--publish", action="store_true")
+    parser.add_argument("--delivery-dir", type=Path, default=ROOT / "产品交付")
+    parser.add_argument("--keep-build", action="store_true")
+    parser.add_argument("--write-icon-only", action="store_true")
+    args = parser.parse_args()
+    write_icon(WINDOWS / "RetailLink.ico")
+    if args.write_icon_only:
+        return
+
+    BUILD.mkdir(parents=True, exist_ok=True)
+    dotnet = find_dotnet() if not args.dotnet else args.dotnet
+    site_packages = find_site_packages(args.python_packages)
+    runtime_zip = download_runtime(BUILD / "cache" / "python-3.12.10-embed-amd64.zip",
+                                   args.python_runtime_zip)
+    version = windows_metadata(RELEASE)["version"]
+    app_publish = BUILD / "app-publish"
+    build_app(dotnet, version, app_publish)
+    payload = build_payload(version, app_publish, runtime_zip, site_packages)
+    smoke_backend(payload)
+    payload_zip = zip_payload(payload, BUILD / "payload.zip")
+    install_destination = BUILD / "installer-publish"
+    installer = build_installer(dotnet, version, payload_zip, install_destination)
+    if args.publish:
+        delivery = publish(args.delivery_dir, installer)
+        print(f"交付完成：{delivery}")
+        if not args.keep_build:
+            clean_build()
+    else:
+        print(f"构建完成：{installer}")
+
+
+if __name__ == "__main__":
+    main()

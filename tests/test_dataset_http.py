@@ -11,13 +11,13 @@ import io
 import json
 from pathlib import Path
 import sys
-import tempfile
 import threading
 import unittest
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 import openpyxl
+from tests.temp_support import temporary_directory
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -32,7 +32,7 @@ def sha256(path):
 
 class DatasetHttpTests(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory(prefix="dataset-http-", dir=Path(__file__).parent)
+        self.temp = temporary_directory(prefix="dataset-http-", directory=Path(__file__).parent)
         self.folder = Path(self.temp.name)
         host.APP_DIR = self.folder / "app"
         host.PROJECT_DIR = host.APP_DIR
@@ -72,6 +72,16 @@ class DatasetHttpTests(unittest.TestCase):
         status, response = self.call(route, body)
         self.assertEqual(status, 200, response)
         return response
+
+    def test_missing_sample_returns_actionable_response(self):
+        status, response = self.call("/api/sample")
+        self.assertEqual(status, 400)
+        self.assertIn("未附带样例", response["error"])
+
+    def test_unknown_api_returns_json_404(self):
+        status, response = self.call("/api/not-found")
+        self.assertEqual(status, 404)
+        self.assertEqual(response["error"], "接口不存在。")
 
     def workbook(self, filename, sheets):
         path = host.ORIGINAL_DIR / filename

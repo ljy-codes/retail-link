@@ -228,6 +228,7 @@ main{padding:31px 36px 0;max-width:1680px;margin:auto}
 .drop-zone h3{font-size:calc(15px * var(--ui-scale,1));font-weight:550;margin:0 0 7px}
 .drop-zone p{font-size:calc(12px * var(--ui-scale,1));color:var(--muted);margin:0 0 18px}
 .upload-actions{display:flex;justify-content:center;gap:10px}
+.sample-unavailable{align-self:center;color:var(--muted);font-size:calc(11px * var(--ui-scale,1));padding:0 6px}
 .empty-cards{margin-top:20px;display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
 .empty-feature{padding:22px 24px;display:flex;align-items:flex-start;gap:13px}
 .empty-feature>.icon{width:20px;height:20px;color:var(--purple);margin-top:3px}

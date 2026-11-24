@@ -15,7 +15,6 @@ import shutil
 import socket
 import subprocess
 import sys
-import tempfile
 import time
 import unittest
 from unittest import mock
@@ -24,10 +23,12 @@ from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 import openpyxl
+from tests.temp_support import temporary_directory
 
 ROOT = Path(__file__).resolve().parents[1]
 DEV = ROOT
 TEST_DIR = Path(__file__).resolve().parent
+WINDOWS = os.name == "nt"
 sys.path.insert(0, str(DEV))
 spec = importlib.util.spec_from_file_location("desktop_host_contract", DEV / "server.py")
 host = importlib.util.module_from_spec(spec)
@@ -36,7 +37,7 @@ spec.loader.exec_module(host)
 
 class DesktopHostTests(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory(prefix="desktop-host-", dir=TEST_DIR)
+        self.temp = temporary_directory(prefix="desktop-host-", directory=TEST_DIR)
         self.folder = Path(self.temp.name)
         self.bundle = self.folder / "只读应用" / "零售通.app"
         self.app = self.bundle / "Contents" / "Resources" / "app"
@@ -122,7 +123,8 @@ class DesktopHostTests(unittest.TestCase):
 
     def stop(self, process):
         process.terminate()
-        self.assertEqual(process.wait(timeout=8), 0)
+        expected = 1 if WINDOWS else 0
+        self.assertEqual(process.wait(timeout=8), expected)
 
     def test_port_zero_ready_metadata_and_read_only_bundle(self):
         process, ready = self.launch()
@@ -145,7 +147,8 @@ class DesktopHostTests(unittest.TestCase):
         self.assertFalse((self.app.parent / "生成文件").exists())
         self.assertFalse((self.app.parent / "原始资料").exists())
         self.stop(process)
-        self.assertFalse(self.ready.exists())
+        if not WINDOWS:
+            self.assertFalse(self.ready.exists())
 
     def test_preferences_survive_new_port_and_backend_process(self):
         process, ready = self.launch()

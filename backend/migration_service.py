@@ -182,8 +182,12 @@ class MigrationService:
 
     @contextmanager
     def _staging(self):
-        with tempfile.TemporaryDirectory(prefix="retail-migration-", dir=self.data_dir) as name:
-            yield Path(name)
+        directory = self.data_dir / f"retail-migration-{uuid.uuid4().hex}"
+        directory.mkdir(mode=0o777)
+        try:
+            yield directory
+        finally:
+            shutil.rmtree(directory, ignore_errors=True)
 
     def _managed_files(self, logs=True):
         files = {}
@@ -369,7 +373,7 @@ class MigrationService:
                         for name, path in files.items():
                             archive.write(path, name)
                         archive.writestr("manifest.json", self._json(manifest))
-                    with temporary.open("rb") as stream:
+                    with temporary.open("rb+") as stream:
                         os.fsync(stream.fileno())
                     # Exercise the same parser the receiving installation uses.
                     with self._validated_bundle(temporary):

@@ -7,11 +7,11 @@ import importlib
 import json
 from pathlib import Path
 import sys
-import tempfile
 import unittest
 import zipfile
 
 import openpyxl
+from tests.temp_support import temporary_directory
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -19,7 +19,7 @@ sys.path.insert(0, str(ROOT))
 
 class DatasetMigrationTests(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory(prefix="dataset-migration-", dir=ROOT / "tests")
+        self.temp = temporary_directory(prefix="dataset-migration-", directory=Path(__file__).parent)
         self.root = Path(self.temp.name)
         self.dataset_module = importlib.import_module("backend.dataset_service")
         self.migration_module = importlib.import_module("backend.migration_service")

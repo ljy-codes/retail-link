@@ -5,10 +5,10 @@ import importlib
 import json
 from pathlib import Path
 import sys
-import tempfile
 import unittest
 
 import openpyxl
+from tests.temp_support import temporary_directory
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -24,7 +24,7 @@ class Handler:
 
 class DailyImportTests(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory(prefix="价量适配自测-", dir=Path(__file__).parent)
+        self.temp = temporary_directory(prefix="价量适配自测-", directory=Path(__file__).parent)
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         self.store = DailyStore(self.root / "data")

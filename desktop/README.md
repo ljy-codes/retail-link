@@ -1,8 +1,10 @@
 # 零售通桌面版开发
 
+> 2026-11-24 GitHub同步更新：已取得并合并Windows0.1.10工程、v0.1.10-windows标签及平台技术发布记录；人工体验仍有未关闭缺陷。Windows0.2.2为desktop-4待适配目标，本机未构建或实机验收。Mac0.2.1安装包的已验收源码锚定v0.2.1-macos（fbb54cf）；后续共享Windows兼容合并不改写已交付DMG。
+
 目标版本 Mac 0.2.1／Windows 0.2.2，功能基线 desktop-4。Mac 奇数、Windows 紧随偶数。版本号与功能清单是源码目标，不代表所有平台均已打包或通过实机验收。
 
-macOS 使用 AppKit／WKWebView 原生壳，内置 Python 仅监听系统分配的 127.0.0.1 端口。共享 server/backend/web 只维护一套业务算法。Windows 复用同一清单和同一虚构样本对照输出；本地没有 Windows 安装器或实机环境。
+macOS 使用 AppKit／WKWebView 原生壳，内置 Python 仅监听系统分配的 127.0.0.1 端口。共享 server/backend/web 只维护一套业务算法。Windows 复用同一清单和同一虚构样本对照输出；已取得并保留Windows0.1.10宿主、安装/卸载和构建工程；本机没有Windows实机环境，0.2.2仍待desktop-4适配。
 
 ## 构建
 

@@ -631,7 +631,7 @@ class DataSetService:
             fd,temp_name=tempfile.mkstemp(prefix=".dataset-",suffix=".xlsx",dir=folder);os.close(fd);temp=Path(temp_name)
             try:
                 workbook.save(temp);workbook.close()
-                with temp.open("rb") as stream:os.fsync(stream.fileno())
+                with temp.open("rb+") as stream:os.fsync(stream.fileno())
                 self._verify_files(pending["staged"]["files"])
                 os.replace(temp,output)
             finally:temp.unlink(missing_ok=True)

@@ -11,10 +11,10 @@ import importlib
 import json
 from pathlib import Path
 import sys
-import tempfile
 import unittest
 
 import openpyxl
+from tests.temp_support import temporary_directory
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -34,7 +34,7 @@ def find_product(result, identity):
 
 class FictionalAssessmentFixture(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory(prefix="per-product-assessment-", dir=TEST_DIR)
+        self.temp = temporary_directory(prefix="per-product-assessment-", directory=TEST_DIR)
         self.folder = Path(self.temp.name)
         self.serial = 0
 

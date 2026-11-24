@@ -14,11 +14,12 @@ import plistlib
 import shutil
 import stat
 import subprocess
-import tempfile
 import time
 import unittest
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
+
+from tests.temp_support import temporary_directory
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -57,7 +58,7 @@ class DesktopPackageTests(unittest.TestCase):
         cls.metadata = json.loads((cls.application / "版本.json").read_text())
 
     def test_embedded_python_is_self_contained_and_executes_actual_dependencies(self):
-        with tempfile.TemporaryDirectory(prefix="package-runtime-", dir=TEST_DIR) as directory:
+        with temporary_directory(prefix="package-runtime-", directory=TEST_DIR) as directory:
             folder = Path(directory)
             home, temporary = folder / "用户目录", folder / "临时目录"
             home.mkdir()
@@ -155,7 +156,7 @@ print(json.dumps({'prefix':sys.prefix,'basePrefix':sys.base_prefix,'executable':
                             or path.name.startswith(("openpyxl-", "et_xmlfile-")) and path.name.endswith(".dist-info"), path.name)
 
     def test_relocated_read_only_bundle_starts_saves_preferences_and_cleans_ready(self):
-        with tempfile.TemporaryDirectory(prefix="package-readonly-", dir=TEST_DIR) as directory:
+        with temporary_directory(prefix="package-readonly-", directory=TEST_DIR) as directory:
             folder = Path(directory)
             relocated = folder / "含空格 中文路径" / self.bundle.name
             shutil.copytree(self.bundle, relocated, symlinks=True)

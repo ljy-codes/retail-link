@@ -6,7 +6,6 @@ import importlib
 import json
 from pathlib import Path
 import sys
-import tempfile
 import unittest
 from unittest.mock import patch
 from concurrent.futures import ThreadPoolExecutor
@@ -14,6 +13,7 @@ import threading
 import zipfile
 
 from openpyxl import load_workbook
+from tests.temp_support import temporary_directory
 
 ROOT = Path(__file__).resolve().parents[1]
 DEV = ROOT
@@ -85,7 +85,7 @@ def sample_result(completed=1234.0):
 
 class ExportServiceTests(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory(prefix="export-service-", dir=ROOT / "tests")
+        self.temp = temporary_directory(prefix="export-service-", directory=Path(__file__).parent)
         self.data_dir = Path(self.temp.name) / "data"
         self.output_dir = Path(self.temp.name) / "output"
         self.output_dir.mkdir(parents=True)
@@ -197,7 +197,12 @@ class ExportServiceTests(unittest.TestCase):
     def test_symlink_target_is_not_followed_or_replaced(self):
         original = self.service.create_xlsx(sample_result(), self.output_dir, "真实.xlsx")
         link = self.output_dir / "链接.xlsx"
-        link.symlink_to(Path(original["path"]))
+        try:
+            link.symlink_to(Path(original["path"]))
+        except OSError as exc:
+            if getattr(exc, "winerror", None) == 1314:
+                self.skipTest("当前 Windows 账号未启用创建符号链接的权限。")
+            raise
         with self.assertRaises(ValueError):
             self.service.create_xlsx(sample_result(9999), self.output_dir, link.name, overwrite=True)
         self.assertTrue(link.is_symlink())

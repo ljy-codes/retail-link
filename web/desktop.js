@@ -1,4 +1,5 @@
 /* Native path selection for the desktop shell. The browser keeps its existing UI. */
+/* Native hosts complete each request through RetailLinkDesktop.resolve(id, result). */
 (() => {
   'use strict';
   const native = window.webkit?.messageHandlers?.retailLinkDesktop;

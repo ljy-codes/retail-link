@@ -26,6 +26,10 @@ import webbrowser
 import zipfile
 
 APP_DIR = Path(__file__).resolve().parent
+# The Windows embeddable distribution uses a ._pth file, which omits the
+# script directory from sys.path. Keep local backend imports available there.
+if str(APP_DIR) not in sys.path:
+    sys.path.insert(0, str(APP_DIR))
 PROJECT_DIR = APP_DIR
 WEB_DIR = APP_DIR / "web"
 DATA_DIR = PROJECT_DIR / "本地数据"
@@ -361,7 +365,8 @@ class Handler(BaseHTTPRequestHandler):
         if status >= 400:
             try:
                 export_service().log_operation("request", {"errorCode": "HTTP_" + str(status), "sourceId": urlparse(self.path).path, "result": "failed"})
-            except OSError:
+            except Exception:
+                # Error logging must never prevent the actual error response.
                 pass
         body = json_bytes(value)
         self.send_response(status)
@@ -418,6 +423,8 @@ class Handler(BaseHTTPRequestHandler):
             if self.dispatch_daily("GET", parsed):
                 return
             if parsed.path == "/api/sample":
+                if not SAMPLE.is_file():
+                    raise ValueError("当前安装包未附带样例文件，请选择本地 Excel 工作簿。")
                 return self.send_json(register_workbook(SAMPLE))
             if parsed.path == "/api/preview":
                 query = parse_qs(parsed.query)

@@ -24,3 +24,26 @@ examples/*.xlsm
 desktop/build/
 *.app/
 *.dmg
+
+# Desktop installers, build caches, delivery binaries and release worktrees
+desktop/windows/**/bin/
+desktop/windows/**/obj/
+产品交付/
+.release-work/
+
+# Local probes and generated test fixtures
+.probe-error/
+probe-mode*/
+tests/daily-export-*/
+tests/dataset-*/
+tests/migration-*/
+tests/desktop-host-*/
+tests/export-service-*/
+tests/per-product-assessment-*/
+tests/source-protection-*/
+tests/价量适配自测-*/
+tests/每日记录自测-*/
+tests/probe-*/
+tests/probe2-*/
+tests/daily-export-windows-gui/
+tests/tmp*/

@@ -1,14 +1,15 @@
 """Daily ledger exports and catalog migration, using fictional isolated data."""
 import base64
+from contextlib import closing
 from io import BytesIO
 import json
 from pathlib import Path
 import sqlite3
 import sys
-import tempfile
 import unittest
 
 import openpyxl
+from tests.temp_support import temporary_directory
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -19,7 +20,7 @@ from backend.migration_service import MigrationService
 
 class DailyExportTests(unittest.TestCase):
     def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory(prefix="daily-export-", dir=Path(__file__).resolve().parent)
+        self.tmp = temporary_directory(prefix="daily-export-", directory=Path(__file__).resolve().parent)
         self.root = Path(self.tmp.name)
         self.store = DailyStore(self.root / "data")
         self.store.save({"date":"2025-11-01", "product":"000001", "name":"虚构A", "shop":"测试仓", "price":0, "salesQuantity":None})
@@ -99,7 +100,7 @@ class DailyExportTests(unittest.TestCase):
         preview = target.preview_import(bundle["path"])
         self.assertEqual(preview["counts"]["productCatalog"], 1)
         target.import_bundle(bundle["path"], confirmation_token=preview["token"])
-        with sqlite3.connect(self.root / "target/daily.sqlite3") as connection:
+        with closing(sqlite3.connect(self.root / "target/daily.sqlite3")) as connection:
             self.assertEqual(connection.execute("SELECT product FROM product_catalog").fetchone()[0], "STANDARD-1")
 
     def test_old_database_without_catalog_is_still_migratable(self):

@@ -393,7 +393,7 @@ class ExportService:
 
     @staticmethod
     def _sync_file(path):
-        with Path(path).open("rb") as stream:
+        with Path(path).open("rb+") as stream:
             os.fsync(stream.fileno())
 
     @staticmethod

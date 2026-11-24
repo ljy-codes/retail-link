@@ -9,7 +9,6 @@ import importlib.util
 import os
 from pathlib import Path
 import sys
-import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -19,6 +18,7 @@ DEV = ROOT / "开发空间" if (ROOT / "开发空间").is_dir() else ROOT
 sys.path.insert(0, str(DEV))
 
 import openpyxl
+from tests.temp_support import temporary_directory
 from backend.export_service import ExportError, ExportService
 
 
@@ -43,7 +43,7 @@ def report():
 
 class SourceServiceTests(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory(prefix="source-protection-", dir=TEST_DIR)
+        self.temp = temporary_directory(prefix="source-protection-", directory=TEST_DIR)
         self.folder = Path(self.temp.name)
         self.output = self.folder / "outputs"
         self.output.mkdir()

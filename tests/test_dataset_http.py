@@ -32,7 +32,7 @@ def sha256(path):
 
 class DatasetHttpTests(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory(prefix="dataset-http-", dir=Path(__file__).parent)
+        self.temp = tempfile.TemporaryDirectory(prefix="dataset-http-", dir=ROOT / "tests")
         self.folder = Path(self.temp.name)
         host.APP_DIR = self.folder / "app"
         host.PROJECT_DIR = host.APP_DIR

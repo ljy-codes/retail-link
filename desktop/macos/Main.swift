@@ -3,8 +3,25 @@ import WebKit
 import Darwin
 
 private let applicationName = "零售通"
-private let applicationVersion = (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "0.1.7"
+private let applicationVersion = (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "0.2.1"
 private let bundleIdentifier = "com.retaillink.desktop.mac"
+private let applicationStart = ProcessInfo.processInfo.systemUptime
+
+private final class ActionButton: NSButton {
+    var perform: (() -> Void)?
+    convenience init(_ title: String, handler: @escaping () -> Void) {
+        self.init(title: title, target: nil, action: nil)
+        perform = handler; target = self; action = #selector(invoke)
+        bezelStyle = .rounded
+    }
+    @objc private func invoke() { perform?() }
+}
+private struct LifecycleAction {
+    let title: String
+    var closes = true
+    var destructive = false
+    let handler: () -> Void
+}
 
 private struct PendingDownload {
     let download: WKDownload
@@ -28,6 +45,10 @@ final class RetailLinkApplication: NSObject, NSApplicationDelegate, NSWindowDele
     private var parentStdinWriter: FileHandle?
     private var startupTimer: Timer?
     private var startupDeadline = Date()
+    private var startupStarted = applicationStart
+    private var startupStage = "准备本地数据"
+    private var frontendReady = false
+    private var lifecyclePanel: NSPanel?
     private var launchDirectory: URL?
     private var backendURL: URL?
     private var backendOutput = ""
@@ -63,6 +84,8 @@ final class RetailLinkApplication: NSObject, NSApplicationDelegate, NSWindowDele
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
+        if let path = Bundle.main.resourceURL?.appendingPathComponent("AppIcon.png").path,
+            let icon = NSImage(contentsOfFile: path) { NSApp.applicationIconImage = icon }
         do {
             try fileManager.createDirectory(at: supportDirectory, withIntermediateDirectories: true)
             let lockURL = supportDirectory.appendingPathComponent("desktop.lock")
@@ -75,9 +98,14 @@ final class RetailLinkApplication: NSObject, NSApplicationDelegate, NSWindowDele
                 NSApp.terminate(nil)
                 return
             }
+            writeLifecycleLog("process_started", extra: ["actualBundle": Bundle.main.bundleURL.path])
+            recordActualInstallation()
             installMenus()
             makeWindow()
-            startBackend()
+            if testRoot != nil && CommandLine.arguments.contains("--lifecycle-preview") {
+                showLoading("界面验收预览", detail: "隔离测试模式；本地业务服务未启动。")
+                DispatchQueue.main.async { [weak self] in self?.showOnboarding() }
+            } else { startBackend() }
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
         } catch {
@@ -107,6 +135,12 @@ final class RetailLinkApplication: NSObject, NSApplicationDelegate, NSWindowDele
         hideOthers.keyEquivalentModifierMask = [.command, .option]
         appMenu.addItem(withTitle: "显示全部", action: #selector(NSApplication.unhideAllApplications(_:)), keyEquivalent: "")
         appMenu.addItem(.separator())
+        let setup = NSMenuItem(title: "安装与升级…", action: #selector(beginInstallation), keyEquivalent: "")
+        setup.target = self; appMenu.addItem(setup)
+        let guide = NSMenuItem(title: "使用与数据说明…", action: #selector(showOnboarding), keyEquivalent: "")
+        guide.target = self; appMenu.addItem(guide)
+        let diagnostics = NSMenuItem(title: "显示启动诊断", action: #selector(showDiagnostics), keyEquivalent: "")
+        diagnostics.target = self; appMenu.addItem(diagnostics)
         let uninstall = NSMenuItem(title: "卸载零售通…", action: #selector(beginUninstall), keyEquivalent: "")
         uninstall.target = self
         appMenu.addItem(uninstall)
@@ -231,91 +265,266 @@ final class RetailLinkApplication: NSObject, NSApplicationDelegate, NSWindowDele
         NSWorkspace.shared.activateFileViewerSelecting([supportDirectory])
     }
 
-    @objc private func beginUninstall() {
-        guard !panelActive, !uninstalling, !terminating else { NSSound.beep(); return }
-        let bundle = Bundle.main.bundleURL.standardizedFileURL
-        let readOnly = (try? bundle.resourceValues(forKeys: [.volumeIsReadOnlyKey]))?.volumeIsReadOnly == true
-        guard bundle.pathExtension == "app", !readOnly,
-            fileManager.isWritableFile(atPath: bundle.deletingLastPathComponent().path),
-            fileManager.isWritableFile(atPath: bundle.path) else {
-            showNativeNotice("请先正常安装 App", detail: "当前应用位于只读磁盘映像或不可写位置。请先将零售通复制到“应用程序”或个人 Applications 文件夹，再从已安装的 App 中卸载。")
-            return
-        }
-        guard downloads.isEmpty else {
-            showNativeNotice("请先完成下载", detail: "完成或取消正在进行的下载后，再卸载零售通。")
-            return
-        }
-        let choice = NSAlert()
-        choice.alertStyle = .warning
-        choice.messageText = "卸载零售通"
-        choice.informativeText = "普通卸载：只将 App 移入废纸篓，保留配置、历史和日志。\n\n彻底卸载：同时将应用专属配置、历史、缓存和日志移入废纸篓。\n\n用户原始文件、导入文件和生成文件始终保留。废纸篓中的项目可恢复。"
-        choice.addButton(withTitle: "普通卸载")
-        choice.addButton(withTitle: "彻底卸载")
-        choice.addButton(withTitle: "取消")
-        panelActive = true
-        choice.beginSheetModal(for: window) { [weak self] result in
-            guard let self = self else { return }
-            self.panelActive = false
-            guard result == .alertFirstButtonReturn || result == .alertSecondButtonReturn else { return }
-            self.confirmUninstall(bundle: bundle, complete: result == .alertSecondButtonReturn)
+    private var nativeLogDirectory: URL {
+        let library = testRoot?.appendingPathComponent("Library", isDirectory: true)
+            ?? fileManager.homeDirectoryForCurrentUser.appendingPathComponent("Library", isDirectory: true)
+        return library.appendingPathComponent("Logs/零售通", isDirectory: true)
+    }
+
+    private func writeLifecycleLog(_ event: String, extra: [String: Any] = [:]) {
+        do {
+            try fileManager.createDirectory(at: nativeLogDirectory, withIntermediateDirectories: true)
+            var value: [String: Any] = ["event": event, "version": applicationVersion, "pid": getpid(),
+                "time": ISO8601DateFormatter().string(from: Date()),
+                "elapsedSeconds": ProcessInfo.processInfo.systemUptime - startupStarted,
+                "os": ProcessInfo.processInfo.operatingSystemVersionString]
+            extra.forEach { value[$0.key] = $0.value }
+            var data = try JSONSerialization.data(withJSONObject: value, options: [.sortedKeys])
+            data.append(0x0a)
+            let url = nativeLogDirectory.appendingPathComponent("startup.jsonl")
+            if !fileManager.fileExists(atPath: url.path) { fileManager.createFile(atPath: url.path, contents: nil) }
+            let handle = try FileHandle(forWritingTo: url)
+            try handle.seekToEnd(); try handle.write(contentsOf: data); try handle.close()
+        } catch { NSLog("零售通诊断日志未写入：%@", error.localizedDescription) }
+    }
+
+    private func recordActualInstallation() {
+        let value: [String: Any] = ["bundleIdentifier": bundleIdentifier, "version": applicationVersion,
+            "actualBundle": Bundle.main.bundleURL.standardizedFileURL.path,
+            "updatedAt": ISO8601DateFormatter().string(from: Date())]
+        if let data = try? JSONSerialization.data(withJSONObject: value, options: [.prettyPrinted, .sortedKeys]) {
+            try? data.write(to: supportDirectory.appendingPathComponent("desktop-install.json"), options: .atomic)
         }
     }
 
-    private func confirmUninstall(bundle: URL, complete: Bool) {
-        let alert = NSAlert()
-        alert.alertStyle = .warning
-        alert.messageText = complete ? "确认彻底卸载？" : "确认普通卸载？"
-        let mode = complete ? "App、应用配置、历史记录、缓存和日志将移入废纸篓。" : "仅 App 移入废纸篓；配置、历史和日志保留。"
-        alert.informativeText = "\(mode)\n\n应用位置：\(bundle.path)\n\n用户原始文件、“导入文件”目录和 Documents 中的生成文件不会移动或删除。卸载完成后应用退出。"
-        alert.addButton(withTitle: "确认卸载")
-        alert.addButton(withTitle: "取消")
-        panelActive = true
-        alert.beginSheetModal(for: window) { [weak self] result in
-            guard let self = self else { return }
-            self.panelActive = false
-            guard result == .alertFirstButtonReturn else { return }
-            self.uninstalling = true
-            self.showLoading("正在卸载零售通…", detail: "正在结束本地服务，源文件与生成文件保持原位。")
-            self.quiesceBackend { [weak self] in
+    @objc private func showDiagnostics() {
+        NSWorkspace.shared.activateFileViewerSelecting([nativeLogDirectory.appendingPathComponent("startup.jsonl")])
+    }
+
+    private func showLifecyclePanel(title: String, subtitle: String, body: String,
+        accessory: NSView? = nil, actions: [LifecycleAction]) {
+        guard !panelActive else { NSSound.beep(); return }
+        let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 680, height: 600),
+            styleMask: [.titled], backing: .buffered, defer: false)
+        panel.title = "零售通 · \(applicationVersion)"
+        let view = NSView(); panel.contentView = view
+        let stack = NSStackView(); stack.orientation = .vertical; stack.alignment = .leading
+        stack.spacing = 15; stack.translatesAutoresizingMaskIntoConstraints = false; view.addSubview(stack)
+        let brand = NSStackView(); brand.orientation = .horizontal; brand.spacing = 14
+        let image = NSImageView(image: NSApp.applicationIconImage); image.imageScaling = .scaleProportionallyUpOrDown
+        image.translatesAutoresizingMaskIntoConstraints = false
+        image.widthAnchor.constraint(equalToConstant: 52).isActive = true
+        image.heightAnchor.constraint(equalToConstant: 52).isActive = true
+        let heading = NSTextField(labelWithString: title); heading.font = .systemFont(ofSize: 25, weight: .semibold)
+        let brandText = NSStackView(); brandText.orientation = .vertical; brandText.alignment = .leading; brandText.spacing = 3
+        let versionLabel = NSTextField(labelWithString: "零售通 · v\(applicationVersion) · Mac")
+        versionLabel.font = .systemFont(ofSize: 12, weight: .medium); versionLabel.textColor = .systemRed
+        brandText.addArrangedSubview(heading); brandText.addArrangedSubview(versionLabel)
+        brand.addArrangedSubview(image); brand.addArrangedSubview(brandText); stack.addArrangedSubview(brand)
+        let intro = NSTextField(wrappingLabelWithString: subtitle)
+        intro.font = .systemFont(ofSize: 14); intro.textColor = .secondaryLabelColor; stack.addArrangedSubview(intro)
+        let scroll = NSScrollView(); scroll.hasVerticalScroller = true; scroll.borderType = .bezelBorder
+        let text = NSTextView(); text.isEditable = false; text.isSelectable = true
+        text.font = .systemFont(ofSize: 13)
+        let paragraph = NSMutableParagraphStyle(); paragraph.lineBreakMode = .byCharWrapping; paragraph.lineSpacing = 3
+        text.defaultParagraphStyle = paragraph; text.string = body
+        text.textContainerInset = NSSize(width: 14, height: 14)
+        text.isVerticallyResizable = true; text.isHorizontallyResizable = false
+        text.autoresizingMask = [.width]
+        text.textContainer?.widthTracksTextView = false
+        text.textContainer?.containerSize = NSSize(width: 568, height: CGFloat.greatestFiniteMagnitude)
+        text.textContainer?.lineBreakMode = .byCharWrapping
+        scroll.documentView = text; stack.addArrangedSubview(scroll)
+        scroll.translatesAutoresizingMaskIntoConstraints = false
+        scroll.heightAnchor.constraint(equalToConstant: accessory == nil ? 300 : 245).isActive = true
+        scroll.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
+        text.frame = NSRect(x: 0, y: 0, width: 602, height: 300)
+        if let accessory = accessory { stack.addArrangedSubview(accessory) }
+        let buttons = NSStackView(); buttons.orientation = .horizontal; buttons.spacing = 10
+        for item in actions {
+            let button = ActionButton(item.title) { [weak self, weak panel] in
                 guard let self = self else { return }
-                do {
-                    let urls = try self.uninstallTargets(bundle: bundle, complete: complete)
-                    NSWorkspace.shared.recycle(urls) { [weak self] _, error in
-                        DispatchQueue.main.async {
-                            guard let self = self else { return }
-                            if let error = error {
-                                self.uninstalling = false
-                                self.showLoading("卸载尚未全部完成", detail: "\(error.localizedDescription)\n已经移入废纸篓的项目可恢复，用户源文件和生成文件未被清理。", failed: true)
-                            } else { NSApp.terminate(nil) }
-                        }
-                    }
-                } catch {
-                    self.uninstalling = false
-                    self.showLoading("卸载未完成", detail: error.localizedDescription, failed: true)
+                if item.closes, let panel = panel {
+                    self.window.endSheet(panel); panel.orderOut(nil); self.lifecyclePanel = nil; self.panelActive = false
+                }
+                item.handler()
+            }
+            if item.destructive { button.contentTintColor = .systemRed }
+            buttons.addArrangedSubview(button)
+        }
+        stack.addArrangedSubview(buttons)
+        NSLayoutConstraint.activate([stack.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 30),
+            stack.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -30),
+            stack.topAnchor.constraint(equalTo: view.topAnchor, constant: 24),
+            stack.bottomAnchor.constraint(lessThanOrEqualTo: view.bottomAnchor, constant: -22)])
+        panelActive = true; lifecyclePanel = panel; window.beginSheet(panel)
+    }
+
+    @objc private func showOnboarding() {
+        let actual = Bundle.main.bundleURL.standardizedFileURL.path
+        showLifecyclePanel(title: "欢迎使用零售通", subtitle: "把销售、库存和经营任务连在一起。文件在本机处理，核对后再作判断。",
+            body: "开始使用\n1. 选择经营工作簿。\n2. 核对商品、仓库、日期和数据问题。\n3. 查看分析，预览后导出结果。\n\n当前应用：\n\(actual)\n\n本地数据：\n\(supportDirectory.path)\n\n默认导出：\n\(exportDirectory.path)\n\n原始 Excel 默认只读；在设置中开启源写回后，每次仍需预览并确认。历史、导入文件和已生成文件与 App 分开保存。\n\n当前业务数据通过本机文件接入；本地服务只监听本机地址，不自动上传工作簿、不定时抓取线上数据。主动打开外部链接时交给系统浏览器。\n\n安装或升级：可选择任意可写的实际目录；升级从新版 App 选择原安装目录，旧 App 保留为恢复副本。",
+            actions: [LifecycleAction(title: "选择安装位置", handler: { [weak self] in self?.beginInstallation() }),
+                LifecycleAction(title: "打开数据目录", closes: false, handler: { [weak self] in self?.showDataDirectory() }),
+                LifecycleAction(title: "开始使用", handler: { [weak self] in
+                    guard let self = self else { return }
+                    try? Data("{\"version\":2}".utf8).write(to: self.supportDirectory.appendingPathComponent("desktop_onboarding.json"), options: .atomic)
+                })])
+    }
+
+    @objc private func beginInstallation() {
+        guard !panelActive, !uninstalling, !terminating else { NSSound.beep(); return }
+        let chooser = NSOpenPanel(); chooser.title = "选择零售通安装位置"
+        chooser.message = "选择实际可写的文件夹。升级请选择旧版所在文件夹；运行中的目标 App 不会被替换。"
+        chooser.canChooseFiles = false; chooser.canChooseDirectories = true; chooser.canCreateDirectories = true
+        chooser.directoryURL = fileManager.homeDirectoryForCurrentUser.appendingPathComponent("Applications")
+        panelActive = true
+        chooser.beginSheetModal(for: window) { [weak self] response in
+            guard let self = self else { return }; self.panelActive = false
+            guard response == .OK, let directory = chooser.url else { return }
+            let target = directory.appendingPathComponent("零售通.app")
+            do {
+                try LifecycleFiles.rejectLinks(target)
+                let expected = LifecycleFiles.exists(target) ? try LifecycleFiles.digest(target) : nil
+                if expected != nil { _ = try LifecycleFiles.bundleInfo(target) }
+                self.showLifecyclePanel(title: expected == nil ? "确认安装位置" : "确认升级位置",
+                    subtitle: "复制通过校验后才启用新版；应用数据与原始文件保持原位。",
+                    body: "版本：\(applicationVersion)\n\n当前来源：\(Bundle.main.bundleURL.path)\n\n实际目标：\(target.path)\n\n\(expected == nil ? "将新建 App，不覆盖已有文件。" : "旧 App 将保留在同目录的“零售通-升级前-…”恢复副本中，不自动删除。")\n\n安装完成后可以立即启动、打开安装目录或完成。Mac 不创建 Windows 开始菜单或未经选择的桌面快捷方式。",
+                    actions: [LifecycleAction(title: "返回选择", handler: { [weak self] in self?.beginInstallation() }),
+                        LifecycleAction(title: "确认安装", handler: { [weak self] in self?.performInstallation(directory: directory, expected: expected) }),
+                        LifecycleAction(title: "取消", handler: {})])
+            } catch { self.showNativeNotice("无法选择此位置", detail: error.localizedDescription) }
+        }
+    }
+
+    private func performInstallation(directory: URL, expected: String?) {
+        showLoading("正在复制并校验 App…", detail: "原始文件与本地历史保留。请等待安装结果。")
+        let source = Bundle.main.bundleURL
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                let target = directory.appendingPathComponent("零售通.app").standardizedFileURL
+                guard !NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier).contains(where: {
+                    $0.bundleURL?.standardizedFileURL == target
+                }) else { throw LifecycleFailure.message("目标 App 正在运行。请退出目标旧版，从新版磁盘映像重新安装。") }
+                let result = try LifecycleFiles.install(source: source, directory: directory, expectedTarget: expected, isRunning: { candidate in
+                    NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier).contains { $0.bundleURL?.standardizedFileURL == candidate }
+                })
+                DispatchQueue.main.async {
+                    self.writeLifecycleLog("installation_complete", extra: ["target": result.target.path, "backup": result.backup?.path ?? ""])
+                    self.restoreWorkspace()
+                    self.showLifecyclePanel(title: "安装完成", subtitle: "零售通 \(applicationVersion) · 本地经营工作空间",
+                        body: "实际安装路径：\n\(result.target.path)\n\n恢复副本：\n\(result.backup?.path ?? "首次安装，无旧版副本")\n\n下一步：选择经营文件 → 核对数据 → 查看并导出。\n\n本地数据：\(self.supportDirectory.path)\n原始表和生成文件保持原位。",
+                        actions: [LifecycleAction(title: "立即启动", handler: { [weak self] in self?.launchInstalled(result.target) }),
+                            LifecycleAction(title: "打开安装目录", closes: false, handler: { NSWorkspace.shared.activateFileViewerSelecting([result.target]) }),
+                            LifecycleAction(title: "完成", handler: {})])
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    self.restoreWorkspace()
+                    self.writeLifecycleLog("installation_failed", extra: ["reason": error.localizedDescription])
+                    self.showLifecyclePanel(title: "安装未完成", subtitle: "本地数据与用户文件未清理。",
+                        body: error.localizedDescription + "\n\n请选择有写入权限且空间充足的位置。旧版恢复副本如已产生将保留在目标目录。",
+                        actions: [LifecycleAction(title: "重新选择", handler: { [weak self] in self?.beginInstallation() }), LifecycleAction(title: "关闭", handler: {})])
                 }
             }
         }
     }
 
-    private func uninstallTargets(bundle: URL, complete: Bool) throws -> [URL] {
-        guard complete else { return [bundle] }
-        var urls = [bundle]
-        // Imported source files can be the user's only remaining copy. Even a
-        // full uninstall preserves the import directory and all user outputs.
-        if fileManager.fileExists(atPath: supportDirectory.path) {
-            let children = try fileManager.contentsOfDirectory(at: supportDirectory,
-                includingPropertiesForKeys: nil, options: [])
-            urls += children.filter { !["导入文件", "原始资料", "生成文件"].contains($0.lastPathComponent) }
+    private func launchInstalled(_ url: URL) {
+        quiesceBackend { [weak self] in
+            guard let self = self else { return }
+            if self.lockDescriptor >= 0 { flock(self.lockDescriptor, LOCK_UN); close(self.lockDescriptor); self.lockDescriptor = -1 }
+            let configuration = NSWorkspace.OpenConfiguration(); configuration.createsNewApplicationInstance = true
+            if let root = self.testRoot { configuration.environment = ["RETAIL_LINK_TEST_ROOT": root.path] }
+            NSWorkspace.shared.openApplication(at: url, configuration: configuration) { _, error in
+                DispatchQueue.main.async {
+                    if let error = error {
+                        let lockURL = self.supportDirectory.appendingPathComponent("desktop.lock")
+                        self.lockDescriptor = open(lockURL.path, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR)
+                        if self.lockDescriptor >= 0 && flock(self.lockDescriptor, LOCK_EX | LOCK_NB) == 0 { self.startBackend() }
+                        self.showNativeNotice("无法启动已安装的 App", detail: error.localizedDescription)
+                    } else { NSApp.terminate(nil) }
+                }
+            }
         }
+    }
+
+    private func restoreWorkspace() {
+        if frontendReady { loadingView.isHidden = true; webView.isHidden = false }
+        else { showLoading("本地工作空间", detail: "可从菜单重新启动工作空间。", failed: true) }
+    }
+
+    @objc private func beginUninstall() {
+        guard !panelActive, !uninstalling, !terminating else { NSSound.beep(); return }
+        let bundle = Bundle.main.bundleURL.standardizedFileURL
+        let readOnly = (try? bundle.resourceValues(forKeys: [.volumeIsReadOnlyKey]))?.volumeIsReadOnly == true
+        guard !readOnly, fileManager.isWritableFile(atPath: bundle.deletingLastPathComponent().path) else {
+            showNativeNotice("当前位置不能卸载", detail: "请从已安装的 App 操作。磁盘映像中的 App 只需推出磁盘，不会清理用户数据。"); return
+        }
+        guard downloads.isEmpty else { showNativeNotice("请先完成下载", detail: "完成或取消下载后再卸载。"); return }
+        let options = NSStackView(); options.orientation = .vertical; options.alignment = .leading; options.spacing = 10
+        let ordinary = ActionButton("普通卸载 · 保留配置、历史和日志（默认）", handler: {})
+        let complete = ActionButton("彻底卸载 · 应用专属数据也移入废纸篓", handler: {})
+        ordinary.setButtonType(.radio); complete.setButtonType(.radio)
+        ordinary.perform = { [weak ordinary, weak complete] in ordinary?.state = .on; complete?.state = .off }
+        complete.perform = { [weak ordinary, weak complete] in ordinary?.state = .off; complete?.state = .on }
+        ordinary.state = .on
+        options.addArrangedSubview(ordinary); options.addArrangedSubview(complete)
+        showLifecyclePanel(title: "选择卸载方式", subtitle: "用户原始资料、导入文件副本和生成文件始终保留。",
+            body: "当前应用：\n\(bundle.path)\n\n普通卸载仅移走当前 App。\n彻底卸载另清理明确列出的应用配置、历史、缓存和日志；未知文件及文件备份保留。\n\n下一步会列出本次实际范围，确认后才开始。移入废纸篓的项目可以恢复。",
+            accessory: options, actions: [LifecycleAction(title: "下一步", handler: { [weak self] in self?.confirmUninstall(bundle: bundle, complete: complete.state == .on) }),
+                LifecycleAction(title: "取消", handler: {})])
+    }
+
+    private func uninstallTargets(bundle: URL, complete: Bool) throws -> [URL] {
         let library = testRoot?.appendingPathComponent("Library", isDirectory: true)
             ?? fileManager.homeDirectoryForCurrentUser.appendingPathComponent("Library", isDirectory: true)
-        for path in ["Caches/\(bundleIdentifier)", "Logs/\(applicationName)", "WebKit/\(bundleIdentifier)",
-            "HTTPStorages/\(bundleIdentifier)", "Preferences/\(bundleIdentifier).plist",
-            "Saved Application State/\(bundleIdentifier).savedState"] {
-            let url = library.appendingPathComponent(path)
-            if fileManager.fileExists(atPath: url.path) { urls.append(url) }
+        return try LifecycleFiles.cleanupPlan(bundle: bundle, support: supportDirectory, library: library, complete: complete)
+    }
+
+    private func confirmUninstall(bundle: URL, complete: Bool) {
+        do {
+            let urls = try uninstallTargets(bundle: bundle, complete: complete)
+            showLifecyclePanel(title: complete ? "确认彻底卸载" : "确认普通卸载", subtitle: "请核对下面的实际范围。此步骤仍可取消。",
+                body: "将移入废纸篓：\n" + urls.map { $0.path }.joined(separator: "\n") + "\n\n始终保留：\n原始资料及导入文件\n\(importDirectory.path)\n\(exportDirectory.path)\n应用数据目录中的 exports 文件备份、writeback/backups 原件备份、writeback/operations 恢复记录与未在清理名单内的文件\n\n本次方式：\(complete ? "彻底卸载" : "普通卸载")",
+                actions: [LifecycleAction(title: "取消", handler: {}), LifecycleAction(title: "确认卸载", destructive: complete, handler: { [weak self] in
+                    self?.performUninstall(urls: urls, complete: complete)
+                })])
+        } catch { showNativeNotice("无法准备卸载", detail: error.localizedDescription) }
+    }
+
+    private func performUninstall(urls: [URL], complete: Bool) {
+        uninstalling = true
+        showLoading("正在卸载零售通…", detail: "正在停止本地服务；完成后会显示实际结果。")
+        quiesceBackend { [weak self] in
+            guard let self = self else { return }
+            NSWorkspace.shared.recycle(urls) { [weak self] recovered, error in
+                DispatchQueue.main.async {
+                    guard let self = self else { return }
+                    let moved = recovered
+                    let failed = urls.filter { LifecycleFiles.exists($0) }
+                    let mode = complete ? "彻底卸载" : "普通卸载"
+                    let movedLines: [String] = moved.map { entry in entry.key.path + " → " + entry.value.path }
+                    let removedText = movedLines.sorted().joined(separator: "\n")
+                    let failedText = failed.isEmpty ? "无" : failed.map { $0.path }.joined(separator: "\n")
+                    var summary = "方式：" + mode + "\n\n已移入废纸篓：\n" + removedText
+                    summary += "\n\n未清理项：\n" + failedText
+                    summary += "\n\n已保留：原始资料、导入文件、生成文件、写回备份及恢复记录和未知文件。\n"
+                    summary += error?.localizedDescription ?? ""
+                    let reportDirectory = self.exportDirectory.deletingLastPathComponent().appendingPathComponent("卸载记录")
+                    let report = reportDirectory.appendingPathComponent("卸载结果-\(UUID().uuidString.prefix(8)).txt")
+                    var reportStatus = "结果记录：" + report.path
+                    do {
+                        try self.fileManager.createDirectory(at: reportDirectory, withIntermediateDirectories: true)
+                        try Data(summary.utf8).write(to: report, options: .atomic)
+                    } catch { reportStatus = "结果记录未能保存：" + error.localizedDescription + "\n请复制本页结果留存。" }
+                    self.showLifecyclePanel(title: failed.isEmpty && error == nil ? "卸载完成" : "卸载尚未全部完成",
+                        subtitle: "核对结果后退出；已移入废纸篓的项目可恢复。", body: summary + "\n\n" + reportStatus,
+                        actions: [LifecycleAction(title: "打开结果记录", closes: false, handler: { NSWorkspace.shared.activateFileViewerSelecting([report]) }),
+                            LifecycleAction(title: "退出", handler: { NSApp.terminate(nil) })])
+                }
+            }
         }
-        return urls
     }
 
     private func showNativeNotice(_ title: String, detail: String) {
@@ -347,6 +556,9 @@ final class RetailLinkApplication: NSObject, NSApplicationDelegate, NSWindowDele
     private func launchBackend() {
         guard !terminating, !uninstalling else { return }
         generation = UUID()
+        startupStarted = ProcessInfo.processInfo.systemUptime
+        frontendReady = false; startupStage = "准备运行环境与本地数据"
+        writeLifecycleLog("startup_attempt")
         let attempt = generation
         backendOutput = ""
         backendURL = nil
@@ -417,6 +629,8 @@ final class RetailLinkApplication: NSObject, NSApplicationDelegate, NSWindowDele
             }
             backend = process
             try process.run()
+            startupStage = "启动本地服务"
+            writeLifecycleLog("backend_started", extra: ["backendPid": process.processIdentifier])
             startupDeadline = Date().addingTimeInterval(40)
             startupTimer = Timer.scheduledTimer(withTimeInterval: 0.15, repeats: true) { [weak self] _ in
                 self?.checkReadiness(file: readyFile, attempt: attempt)
@@ -428,8 +642,11 @@ final class RetailLinkApplication: NSObject, NSApplicationDelegate, NSWindowDele
     }
 
     private func checkReadiness(file: URL, attempt: UUID) {
-        guard generation == attempt, let child = backend else { return }
-        if let data = try? Data(contentsOf: file),
+        guard generation == attempt, let child = backend, !frontendReady else { return }
+        let elapsed = ProcessInfo.processInfo.systemUptime - startupStarted
+        detailLabel.stringValue = "阶段：\(startupStage) · 已用 \(String(format: "%.1f", elapsed)) 秒\n" +
+            (elapsed > 8 ? "仍在启动，正在等待当前阶段完成；可从帮助菜单查看诊断。" : "数据在本机处理。")
+        if backendURL == nil, let data = try? Data(contentsOf: file),
             let value = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
             let raw = value["url"] as? String, let url = URL(string: raw),
             url.scheme == "http", url.host == "127.0.0.1", let port = url.port, (1...65535).contains(port),
@@ -437,15 +654,27 @@ final class RetailLinkApplication: NSObject, NSApplicationDelegate, NSWindowDele
             url.path.isEmpty || url.path == "/",
             let pid = value["pid"] as? NSNumber, pid.int32Value == child.processIdentifier,
             let version = value["version"] as? String, version == applicationVersion {
-            startupTimer?.invalidate()
-            startupTimer = nil
-            backendURL = url
+            backendURL = url; startupStage = "打开工作台并准备数据"
+            writeLifecycleLog("backend_ready")
             statusLabel.stringValue = "正在打开经营工作台…"
             webView.load(URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData))
-        } else if Date() > startupDeadline {
-            let detail = backendOutput.isEmpty ? "启动超时，请重试。若仍无法启动，请检查完整 App 是否已复制到本机。" : String(backendOutput.suffix(1800))
+        }
+        if Date() > startupDeadline {
+            writeLifecycleLog("startup_timeout", extra: ["stage": startupStage, "guardSeconds": 40])
+            let detail = "阶段：\(startupStage)。总启动等待已超时，请重试或查看启动诊断。\n" + String(backendOutput.suffix(1600))
             quiesceBackend { [weak self] in self?.showLoading("本地工作空间尚未就绪", detail: detail, failed: true) }
         }
+    }
+
+    private func markFrontendReady() {
+        guard !frontendReady, !terminating, !uninstalling else { return }
+        frontendReady = true; startupStage = "工作台可操作"
+        startupTimer?.invalidate(); startupTimer = nil
+        writeLifecycleLog("frontend_ready", extra: ["processToReadySeconds": ProcessInfo.processInfo.systemUptime - applicationStart])
+        progress.stopAnimation(nil); loadingView.isHidden = true; webView.isHidden = false
+        window.makeFirstResponder(webView)
+        let guide = supportDirectory.appendingPathComponent("desktop_onboarding.json")
+        if !fileManager.fileExists(atPath: guide.path) { DispatchQueue.main.async { [weak self] in self?.showOnboarding() } }
     }
 
     private func quiesceBackend(completion: @escaping () -> Void) {
@@ -532,10 +761,8 @@ final class RetailLinkApplication: NSObject, NSApplicationDelegate, NSWindowDele
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         guard isLocal(webView.url) else { return }
-        progress.stopAnimation(nil)
-        loadingView.isHidden = true
-        webView.isHidden = false
-        window.makeFirstResponder(webView)
+        startupStage = "准备工作台数据与操作入口"
+        writeLifecycleLog("page_loaded")
     }
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
@@ -630,8 +857,9 @@ final class RetailLinkApplication: NSObject, NSApplicationDelegate, NSWindowDele
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         guard message.name == "retailLinkDesktop", trusted(message.frameInfo),
-            let body = message.body as? [String: Any], let identifier = body["id"],
-            let action = body["action"] as? String else { return }
+            let body = message.body as? [String: Any], let action = body["action"] as? String else { return }
+        if action == "frontendReady" { markFrontendReady(); return }
+        guard let identifier = body["id"] else { return }
         let validIdentifier = (identifier as? String).map { !$0.isEmpty && $0.count <= 128 } ?? (identifier is NSNumber)
         guard validIdentifier else { return }
         if action == "showInFolder" {
@@ -743,11 +971,8 @@ final class RetailLinkApplication: NSObject, NSApplicationDelegate, NSWindowDele
     func downloadDidFinish(_ download: WKDownload) {
         guard let pending = downloads.removeValue(forKey: ObjectIdentifier(download)) else { return }
         defer { try? fileManager.removeItem(at: pending.directory) }
-        // Both files are on the same filesystem. link() publishes without a
-        // replace race: another application's newly created file is preserved.
-        if link(pending.staging.path, pending.destination.path) != 0 {
-            showDownloadError("无法保存下载文件（\(String(cString: strerror(errno)))）。请选择其他位置或新文件名。已有文件保持不变。")
-        }
+        do { try LifecycleFiles.publishDownload(source: pending.staging, destination: pending.destination) }
+        catch { showDownloadError(error.localizedDescription) }
     }
 
     func download(_ download: WKDownload, didFailWithError error: Error, resumeData: Data?) {
@@ -767,7 +992,12 @@ final class RetailLinkApplication: NSObject, NSApplicationDelegate, NSWindowDele
     }
 }
 
-let application = NSApplication.shared
-let applicationDelegate = RetailLinkApplication()
-application.delegate = applicationDelegate
-application.run()
+@main
+struct RetailLinkEntry {
+    static func main() {
+        let application = NSApplication.shared
+        let applicationDelegate = RetailLinkApplication()
+        application.delegate = applicationDelegate
+        application.run()
+    }
+}

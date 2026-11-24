@@ -25,7 +25,7 @@ def sha(path):
 
 class MigrationTests(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory(prefix="migration-", dir=Path(__file__).parent)
+        self.temp = tempfile.TemporaryDirectory(prefix="migration-", dir=ROOT / "tests")
         self.root = Path(self.temp.name)
         self.origin = self.root / "origin"
         self.output = self.root / "output"

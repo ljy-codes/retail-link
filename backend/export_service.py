@@ -21,6 +21,8 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.table import Table, TableStyleInfo
 
+from .file_publish import publish_no_clobber
+
 
 class ExportError(ValueError):
     pass
@@ -265,9 +267,9 @@ class ExportService:
             ("供价金额", summary.get("supplyAmount"), "元"),
             ("折扣比例", summary.get("discountRate"), "供价金额 ÷ 出库到岸金额"),
             ("折价幅度", summary.get("markdownRate"), "1 − 折扣比例"),
-            ("货损金额", summary.get("lossAmount"), "元"),
+            ("货损金额", summary.get("lossAmount"), "元；登记值，尚非公式盘差"),
             ("货损率", summary.get("lossRate"), "货损金额 ÷ 出库到岸金额"),
-            ("累计销量", summary.get("salesQuantity"), "销售小单位；按当前统计期间"),
+            ("映射累计销量", summary.get("salesQuantity"), "销售小单位；按当前统计期间；未自动扣除售后"),
             ("数据问题数", summary.get("issueCount", len(result.get("issues") or [])), "条"),
             ("部分汇总指标", "、".join({"plan": "月计划", "completed": "累计完成", "stockAmount": "现货金额",
                 "outboundAmount": "出库金额", "supplyAmount": "供价金额", "lossAmount": "货损金额"}.get(key, key)
@@ -317,7 +319,7 @@ class ExportService:
             ("id", "商品标识", 22), ("name", "商品名称", 26), ("code", "商品编码", 24), ("warehouse", "仓库或渠道", 20),
             ("pack", "箱规或换算率", 18), ("stockLarge", "现货大单位", 17), ("stockSmall", "现货小单位", 17),
             ("stockAmount", "现货金额", 18), ("transitSmall", "在途小单位", 17), ("transitAmount", "在途金额", 18),
-            ("salesQuantity", "累计销量", 17), ("yesterdaySales", "昨日销量", 17), ("averageSales", "日均销量", 17),
+            ("salesQuantity", "映射销量（未扣售后）", 25), ("yesterdaySales", "昨日销量", 17), ("averageSales", "日均销量", 17),
             ("coverageDays", "现货可售天数", 18),
         ]
         for name, definitions, table_name in [(self.SHEETS[1], fields, "ProductDetails"), (self.SHEETS[2], inventory_fields, "InventorySales")]:
@@ -346,6 +348,39 @@ class ExportService:
                     elif isinstance(cell.value, (int, float)):
                         cell.number_format = "#,##0.00" if key.endswith("Amount") or key in {"plan", "completed", "targetGap", "dailyRequired"} and money else "#,##0.##"
             self._style_sheet(sheet, [field[2] for field in definitions], table_name)
+            if name == self.SHEETS[2] and any(p.get("warehouseStocks") for p in result["products"]):
+                self._append(sheet, [])
+                self._append(sheet, ["分仓库存（辅助合计不替代分仓；缺同库存池销量则可售天数未计算）"])
+                start = sheet.max_row + 1
+                self._append(sheet, ["商品标识", "商品名称", "仓库ID", "仓库名称", "现货大单位", "现货小单位", "库存金额", "分仓可售天数"])
+                for cell in sheet[start]:
+                    cell.font = Font(bold=True, color="FFFFFF")
+                    cell.fill = PatternFill("solid", fgColor="285B59")
+                for product in result["products"]:
+                    for stock in product.get("warehouseStocks") or []:
+                        self._append(sheet, [product["id"], product.get("name"), stock.get("warehouseId"), stock.get("warehouse"), stock.get("stockLarge"), stock.get("stockSmall"), stock.get("stockAmount"), stock.get("coverageDays")])
+                        for cell in list(sheet[sheet.max_row])[:4]:
+                            cell.data_type = "s"
+                        for cell in list(sheet[sheet.max_row])[4:8]:
+                            cell.number_format = "#,##0.00"
+                if sheet.max_row > start:
+                    sheet.add_table(Table(displayName="WarehouseStocks", ref=f"A{start}:H{sheet.max_row}"))
+
+
+        net_rows = [(p, n) for p in result["products"] for n in p.get("netSales") or []]
+        if net_rows:
+            sheet = wb[self.SHEETS[2]]
+            self._append(sheet, [])
+            self._append(sheet, ["保存时的净销量双视角（与上方映射销量分别展示，不相加）"])
+            snapshot = result.get("operationsSnapshot") or {}
+            self._append(sheet, ["统计范围", snapshot.get("start"), snapshot.get("end"), "售后观察截止", snapshot.get("asOf")])
+            start = sheet.max_row + 1
+            self._append(sheet, ["商品标识", "仓库ID", "仓库名称", "单位", "原销售归属净量", "原期已观察净量", "售后发生净量", "发生期已观察净量", "完整状态"])
+            for product, net in net_rows:
+                self._append(sheet, [product["id"], net.get("warehouseId"), net.get("warehouse"), net.get("unit"), net.get("originalNetQuantity"), net.get("originalObservedNetQuantity"), net.get("occurrenceNetQuantity"), net.get("occurrenceObservedNetQuantity"), "完整" if net.get("complete") else "待核对"])
+                for cell in list(sheet[sheet.max_row])[:4]:
+                    cell.data_type = "s"
+            sheet.add_table(Table(displayName="SavedNetSales", ref=f"A{start}:I{sheet.max_row}"))
 
         issues = wb.create_sheet(self.SHEETS[3])
         self._append(issues, ["级别", "问题代码", "标题", "详情", "工作表", "单元格", "商品标识"])
@@ -554,7 +589,7 @@ class ExportService:
                     os.replace(temp, output)
                 else:
                     try:
-                        os.link(temp, output)
+                        published_identity = publish_no_clobber(temp, output)
                     except FileExistsError as exc:
                         raise AlreadyExistsError("生成期间出现同名文件，已保留，请使用其他文件名。") from exc
                     temp.unlink()
@@ -714,7 +749,7 @@ class ExportService:
                             shutil.copyfileobj(source, destination)
                     destination.flush()
                     os.fsync(destination.fileno())
-                os.link(temporary, output)
+                publish_no_clobber(temporary, output)
                 self._sync_directory(directory)
             finally:
                 temporary.unlink(missing_ok=True)

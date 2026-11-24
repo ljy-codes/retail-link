@@ -23,6 +23,9 @@ import time
 import uuid
 import zipfile
 
+from .file_publish import publish_no_clobber
+from .product_identity import CATALOG_COLUMNS as IDENTITY_CATALOG_COLUMNS, DAILY_IDENTITY_FIELDS, daily_identity, normalize_catalog
+
 
 class MigrationError(ValueError):
     pass
@@ -196,7 +199,7 @@ class MigrationService:
                     relative = path.relative_to(self.data_dir).as_posix()
                     if self._HISTORY_RE.fullmatch(relative):
                         files[relative] = self._inside(relative)
-        for name in ("daily.sqlite3", "preferences.json", "import_templates.json"):
+        for name in ("daily.sqlite3", "preferences.json", "import_templates.json", "operations/state.json"):
             path = self._inside(name)
             if path.is_file():
                 files[name] = path
@@ -224,14 +227,15 @@ class MigrationService:
             try:
                 conn.execute("PRAGMA query_only=ON")
                 version = conn.execute("PRAGMA user_version").fetchone()[0]
-                if version not in (0, 1):
+                if version not in (0, 1, 2):
                     raise MigrationError("日记录数据库版本过新，不能导入当前工具。")
                 if conn.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
                     raise MigrationError("日记录数据库完整性校验失败。")
                 objects = conn.execute("SELECT type,name FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'").fetchall()
                 if any(kind not in ("table", "index") or (kind == "table" and name not in ("daily_records", "daily_revisions", "product_catalog")) for kind, name in objects):
                     raise MigrationError("日记录数据库含不支持的结构。")
-                for table, expected in (("daily_records", cls.RECORD_COLUMNS), ("daily_revisions", cls.REVISION_COLUMNS)):
+                record_columns = cls.RECORD_COLUMNS | set(DAILY_IDENTITY_FIELDS) | {"identityKey"} if version == 2 else cls.RECORD_COLUMNS
+                for table, expected in (("daily_records", record_columns), ("daily_revisions", cls.REVISION_COLUMNS)):
                     columns = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
                     if columns != expected:
                         raise MigrationError("日记录数据库字段不兼容。")
@@ -243,7 +247,15 @@ class MigrationService:
                         raise MigrationError("日记录数据库含无效数值。")
                     if deleted not in (0, 1) or not isinstance(revision, int) or revision < 1:
                         raise MigrationError("日记录数据库状态无效。")
-                    json.loads(source)
+                    json.loads(source, parse_constant=lambda v: (_ for _ in ()).throw(ValueError(v)))
+                if version == 2:
+                    conn.row_factory = sqlite3.Row
+                    for row in conn.execute("SELECT * FROM daily_records"):
+                        record = dict(row)
+                        record["source"] = json.loads(record["source"])
+                        if any(not isinstance(record[key], str) or len(record[key]) > 200 for key in DAILY_IDENTITY_FIELDS) or record["identityKey"] != daily_identity(record):
+                            raise MigrationError("日记录身份字段或去重键无效。")
+                    conn.row_factory = None
                 for record_id, snapshot in conn.execute("SELECT recordId,snapshot FROM daily_revisions"):
                     saved = json.loads(snapshot)
                     if not isinstance(saved, dict) or saved.get("id") != record_id:
@@ -251,23 +263,32 @@ class MigrationService:
                 catalog_count = 0
                 if ("table", "product_catalog") in objects:
                     columns = {row[1] for row in conn.execute("PRAGMA table_info(product_catalog)")}
-                    if columns != cls.CATALOG_COLUMNS:
+                    expected_catalog = IDENTITY_CATALOG_COLUMNS if version == 2 else cls.CATALOG_COLUMNS
+                    if columns != expected_catalog:
                         raise MigrationError("商品关联字段不兼容。")
                     keys = set()
-                    for row in conn.execute("SELECT sourceProduct,sourceShop,product,name,specification,shop,source,revision,updatedAt FROM product_catalog"):
-                        source_product, source_shop, product, name, specification, shop, source, revision, updated = row
+                    conn.row_factory = sqlite3.Row
+                    for row in conn.execute("SELECT * FROM product_catalog"):
+                        item = dict(row)
+                        source_product, source_shop, product, name, specification, shop, source, revision, updated = [item[key] for key in ("sourceProduct", "sourceShop", "product", "name", "specification", "shop", "source", "revision", "updatedAt")]
                         if (not isinstance(source_product, str) or not source_product.strip() or len(source_product) > 200
                                 or not isinstance(product, str) or not product.strip() or len(product) > 200
                                 or any(not isinstance(v, str) or len(v) > 500 for v in (source_shop, name, specification, shop))
                                 or not isinstance(revision, int) or revision < 1):
                             raise MigrationError("商品关联内容无效。")
                         key = (source_product, source_shop)
+                        if version == 2:
+                            normalized = normalize_catalog(item | {"source": json.loads(source)})
+                            if normalized["catalogId"] != item["catalogId"] or any(not isinstance(item[k], str) for k in IDENTITY_CATALOG_COLUMNS - {"revision"}):
+                                raise MigrationError("商品关联身份或键无效。")
+                            key = item["catalogId"]
                         if key in keys:
                             raise MigrationError("商品关联含重复来源。")
                         keys.add(key)
                         json.loads(source)
                         datetime.fromisoformat(updated)
                         catalog_count += 1
+                    conn.row_factory = None
                 return {"dailyRecords": conn.execute("SELECT COUNT(*) FROM daily_records").fetchone()[0],
                         "dailyRevisions": conn.execute("SELECT COUNT(*) FROM daily_revisions").fetchone()[0],
                         "productCatalog": catalog_count}
@@ -290,7 +311,7 @@ class MigrationService:
             original.close()
 
     def _validate_files(self, files):
-        counts = {"history": 0, "historyDeleted": 0, "dailyRecords": 0, "dailyRevisions": 0, "productCatalog": 0, "preferences": 0, "importTemplates": 0, "logFiles": 0}
+        counts = {"history": 0, "historyDeleted": 0, "dailyRecords": 0, "dailyRevisions": 0, "productCatalog": 0, "preferences": 0, "importTemplates": 0, "logFiles": 0, "operationRecords": 0}
         ids = set()
         for name, path in files.items():
             match = self._HISTORY_RE.fullmatch(name)
@@ -304,6 +325,13 @@ class MigrationService:
                 counts["history" if match[1] == "history" else "historyDeleted"] += 1
             elif name == "daily.sqlite3":
                 counts.update(self._validate_database(path))
+            elif name == "operations/state.json":
+                from .operations import validate_state
+                try:
+                    value = validate_state(self._read_json(path))
+                except (ValueError, TypeError, KeyError) as exc:
+                    raise MigrationError("经营记录结构无效，不能迁移。") from exc
+                counts["operationRecords"] = len(value["records"])
             elif name == "preferences.json":
                 self.validate_preferences(self._read_json(path))
                 counts["preferences"] = 1
@@ -374,7 +402,7 @@ class MigrationService:
                     # Exercise the same parser the receiving installation uses.
                     with self._validated_bundle(temporary):
                         pass
-                    os.link(temporary, out)  # Atomic no-clobber publication.
+                    publish_no_clobber(temporary, out)
                     self._sync_directory(out.parent)
                     digest, size = self._sha(out), out.stat().st_size
                     self._audit("data_export", result="success", target=str(out), sha256=digest, bytes=size, counts=counts)
@@ -403,7 +431,7 @@ class MigrationService:
                     posix = PurePosixPath(item.filename)
                     if item.is_dir() or posix.is_absolute() or ".." in posix.parts or "\\" in item.filename or posix.as_posix() != item.filename or stat.S_ISLNK(item.external_attr >> 16) or item.flag_bits & 1:
                         raise MigrationError("迁移包包含不安全路径或不支持的文件。")
-                    if item.filename != "manifest.json" and not (self._HISTORY_RE.fullmatch(item.filename) or self._LOG_RE.fullmatch(item.filename) or item.filename in ("daily.sqlite3", "preferences.json", "import_templates.json")):
+                    if item.filename != "manifest.json" and not (self._HISTORY_RE.fullmatch(item.filename) or self._LOG_RE.fullmatch(item.filename) or item.filename in ("daily.sqlite3", "preferences.json", "import_templates.json", "operations/state.json")):
                         raise MigrationError("迁移包包含不允许的文件。")
                 if archive.getinfo("manifest.json").file_size > 8 * 1024 * 1024:
                     raise MigrationError("迁移包清单过大。")
@@ -452,8 +480,8 @@ class MigrationService:
                 issues.append(f"{name} 的 ID 已在另一历史列表中；合并时保留本地状态。")
             elif target:
                 issues.append(f"{name} 已存在；合并时保留本地文件。")
-                if name == "daily.sqlite3" and self._sha(target) != self._sha(source):
-                    blockers.append("本地已有日记录数据库。请确认后选择替换，避免静默丢弃任何一侧记录。")
+                if name in {"daily.sqlite3", "operations/state.json"} and self._sha(target) != self._sha(source):
+                    blockers.append("本地已有日记录数据库或经营记录。请确认后选择替换，避免静默丢弃任何一侧记录。")
         return issues, blockers
 
     def preview_import(self, bundle_path):

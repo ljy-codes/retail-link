@@ -177,11 +177,12 @@ class DailyImportTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "已变化"):
             save_catalog(self.store, row, expected_revision=1)
 
-    def test_catalog_conflicting_specs_are_excluded_until_explicitly_resolved(self):
+    def test_catalog_different_specs_become_distinct_products(self):
         preview = import_catalog(self.store, self.catalog_fixture(conflict=True), {"previewOnly": True})
-        self.assertEqual(preview["validCount"], 1)
-        self.assertEqual(preview["records"][0]["sourceProduct"], "0002")
-        self.assertIn("不同名称或规格", preview["issues"][0]["message"])
+        self.assertEqual(preview["validCount"], 3)
+        variants = [row for row in preview["records"] if row["sourceProduct"] == "0001"]
+        self.assertEqual(len({row["product"] for row in variants}), 2)
+        self.assertEqual(preview["issues"], [])
 
     def test_catalog_commit_requires_current_preview(self):
         entry = self.catalog_fixture()

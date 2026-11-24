@@ -19,7 +19,7 @@ sys.path.insert(0, str(ROOT))
 
 class DatasetMigrationTests(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory(prefix="dataset-migration-", dir=Path(__file__).parent)
+        self.temp = tempfile.TemporaryDirectory(prefix="dataset-migration-", dir=ROOT / "tests")
         self.root = Path(self.temp.name)
         self.dataset_module = importlib.import_module("backend.dataset_service")
         self.migration_module = importlib.import_module("backend.migration_service")

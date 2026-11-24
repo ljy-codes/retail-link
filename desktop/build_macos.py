@@ -57,13 +57,19 @@ def icon(resources):
     from PIL import Image, ImageDraw
     image = Image.new("RGBA", (1024, 1024))
     draw = ImageDraw.Draw(image)
-    draw.rounded_rectangle((28, 28, 996, 996), radius=220, fill="#182838")
-    draw.rounded_rectangle((160, 330, 864, 800), radius=54, fill="#229C9D")
-    draw.line((154, 349, 512, 151, 870, 349), fill="#9CE3DC", width=58, joint="curve")
-    for x, y in [(279, 560), (433, 450), (587, 360)]:
-        draw.rounded_rectangle((x, y, x + 106, 721), radius=18, fill="#F3FAFA")
+    # Customer-selected red identity with a white operating trend line.
+    draw.rounded_rectangle((60, 60, 964, 964), radius=202, fill="#F8E7E5")
+    draw.rounded_rectangle((125, 125, 899, 899), radius=165, fill="#BE3835")
+    draw.line([(254, 684), (254, 346)], fill="#E8A5A1", width=32)
+    draw.line([(254, 684), (779, 684)], fill="#E8A5A1", width=32)
+    points = [(285, 596), (423, 491), (553, 548), (723, 355)]
+    draw.line(points, fill="#FFFFFF", width=70, joint="curve")
+    for x, y in points:
+        draw.ellipse((x - 34, y - 34, x + 34, y + 34), fill="#FFFFFF")
+    draw.ellipse((672, 304, 774, 406), fill="#FFFFFF")
     (resources / "AppIcon.png").parent.mkdir(parents=True, exist_ok=True)
     image.save(resources / "AppIcon.png")
+    image.save(resources / "RetailLink.ico", sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
     icons = BUILD / "RetailLink.iconset"
     icons.mkdir(exist_ok=True)
     for size in (16, 32, 128, 256, 512):
@@ -90,7 +96,7 @@ def build(python_source):
     info["CFBundleIconFile"] = "RetailLink.icns"
     (contents / "Info.plist").write_bytes(plistlib.dumps(info))
     run("swiftc", "-O", "-target", "x86_64-apple-macosx13.0", "-framework", "Cocoa", "-framework", "WebKit",
-        DESKTOP / "macos/Main.swift", "-o", executable)
+        DESKTOP / "macos/Main.swift", DESKTOP / "macos/LifecycleSupport.swift", "-o", executable)
     app_source = resources / "app"
     app_source.mkdir()
     shutil.copy2(DEV / "server.py", app_source / "server.py")

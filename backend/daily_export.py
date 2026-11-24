@@ -13,7 +13,7 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
 MAX_RECORDS = 50000
-HEADERS = ("业务日期", "商品标识", "商品名称", "店铺／仓库", "当日售价", "当日销量", "记录状态", "版本", "来源")
+HEADERS = ("业务日期", "商品标识", "商品名称", "店铺／仓库", "当日售价", "当日销量", "记录状态", "版本", "来源", "来源系统", "来源SKU", "规格", "仓库ID")
 
 
 def _literal(value):
@@ -66,10 +66,10 @@ def export_daily(store, query, format="xlsx"):
              ("记录范围", "已删除" if deleted else "当前有效"), ("记录数量", len(records)),
              ("销量口径", "记录来源的当日销量，未自动扣除售后"),
              ("售价口径", "当日记录价，不代表实际成交均价"),
-             ("商品关联范围", "当前全量关联仅供参考，历史日记录使用保存时的商品和数值")]
+             ("商品关联范围", "当前全量关联仅供参考，历史日记录使用保存时的商品和数值"), ("CSV类型", "CSV用于交换，Excel打开可能转换前导零和长ID；二次编辑请优先Excel")]
     rows = [[item["date"], item["product"], item["name"], item["shop"], item["price"],
              item["salesQuantity"], "已删除" if item["deleted"] else "有效", item["revision"],
-             _source(item["source"])] for item in records]
+             _source(item["source"]), *[item.get(k, "") for k in ("sourceSystem", "sourceSku", "specification", "warehouseId")]] for item in records]
     if format == "csv":
         stream = StringIO(newline="")
         writer = csv.writer(stream)
@@ -91,11 +91,11 @@ def export_daily(store, query, format="xlsx"):
             ledger.append(row)
         for row in ledger.iter_rows(min_row=2):
             row[0].number_format = "yyyy-mm-dd"
-            for index in (1, 2, 3, 8):
+            for index in (1, 2, 3, 8, 9, 10, 11, 12):
                 row[index].data_type = "s"
             for index in (4, 5):
                 row[index].number_format = "#,##0.00"
-        _style(ledger, (14, 25, 28, 22, 16, 16, 12, 10, 64))
+        _style(ledger, (14, 25, 28, 22, 16, 16, 12, 10, 64, 22, 22, 24, 22))
         details = book.create_sheet("导出范围")
         details.append(["项目", "范围与口径"])
         for key, value in scope:
@@ -105,13 +105,14 @@ def export_daily(store, query, format="xlsx"):
         _style(details, (24, 68))
         # Catalog is context only: old ledger rows retain their saved identifiers.
         catalog = book.create_sheet("商品关联")
-        catalog.append(["来源商品ID", "来源仓位", "标准商品标识", "商品名称", "规格", "标准仓位", "版本"])
+        catalog.append(["来源商品ID", "来源仓位", "标准商品标识", "商品名称", "规格", "标准仓位", "版本", "来源系统", "来源SKU", "来源规格", "来源仓库ID", "仓库ID"])
         with store._connect() as connection:
             exists = connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='product_catalog'").fetchone()
-            entries = connection.execute("SELECT sourceProduct,sourceShop,product,name,specification,shop,revision FROM product_catalog ORDER BY sourceProduct,sourceShop").fetchall() if exists else []
+            entries = connection.execute("SELECT * FROM product_catalog ORDER BY sourceProduct,sourceShop").fetchall() if exists else []
         for entry in entries:
-            catalog.append(list(entry))
-            for cell in list(catalog[catalog.max_row])[:6]:
+            entry = dict(entry)
+            catalog.append([entry.get(k, "") for k in ("sourceProduct", "sourceShop", "product", "name", "specification", "shop", "revision", "sourceSystem", "sourceSku", "sourceSpecification", "sourceWarehouseId", "warehouseId")])
+            for cell in list(catalog[catalog.max_row])[:6] + list(catalog[catalog.max_row])[7:]:
                 cell.data_type = "s"
         _style(catalog, (25, 22, 25, 28, 24, 22, 10))
         stream = BytesIO()

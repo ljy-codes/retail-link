@@ -85,7 +85,7 @@ def sample_result(completed=1234.0):
 
 class ExportServiceTests(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory(prefix="export-service-", dir=Path(__file__).parent)
+        self.temp = tempfile.TemporaryDirectory(prefix="export-service-", dir=ROOT / "tests")
         self.data_dir = Path(self.temp.name) / "data"
         self.output_dir = Path(self.temp.name) / "output"
         self.output_dir.mkdir(parents=True)

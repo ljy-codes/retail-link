@@ -14,6 +14,8 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+from .file_publish import publish_no_clobber
+
 
 class HistoryStore:
     """Thread-safe file storage for complete analysis results.
@@ -88,9 +90,8 @@ class HistoryStore:
     def _create(self, path: Path, payload: bytes):
         """Publish a fully flushed file atomically without replacing a target.
 
-        The temporary file and target are on the same filesystem. Linking the
-        completed file publishes it in one operation and fails if the target is
-        already present, unlike replace()/rename() which may overwrite data.
+        The shared publisher uses hard links or exclusive native rename, and
+        fails if a target already exists. No partially written target is visible.
         """
         temporary = None
         try:
@@ -101,7 +102,7 @@ class HistoryStore:
                 stream.flush()
                 os.fsync(stream.fileno())
             try:
-                os.link(temporary, path)
+                publish_no_clobber(temporary, path)
             except FileExistsError as exc:
                 raise ValueError("相同 ID 的历史记录已存在，不能覆盖。") from exc
             self._sync_directory(path.parent)
@@ -181,10 +182,9 @@ class HistoryStore:
         if self._exists(destination):
             raise ValueError("目标列表中已存在相同 ID，不能覆盖历史记录。")
         try:
-            # link + unlink never replaces a pre-existing snapshot. Both
-            # directories are local siblings. A crash between the two can leave
-            # two recoverable copies, but can never lose the only saved copy.
-            os.link(source, destination)
+            # Publish without replacement, retaining the source until complete.
+            # A crash before unlink can leave two recoverable copies.
+            publish_no_clobber(source, destination)
             try:
                 source.unlink()
             except OSError:

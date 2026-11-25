@@ -1,10 +1,10 @@
 # 零售通桌面版开发
 
-> 2026-11-24 GitHub同步更新：已取得并合并Windows0.1.10工程、v0.1.10-windows标签及平台技术发布记录；人工体验仍有未关闭缺陷。Windows0.2.2为desktop-4待适配目标，本机未构建或实机验收。Mac0.2.1安装包的已验收源码锚定v0.2.1-macos（fbb54cf）；后续共享Windows兼容合并不改写已交付DMG。
+> 2026-11-25 发布更新：Windows v0.2.2 已完成技术构建、安装／启动／单实例／进程回收和普通／彻底卸载范围验证，并发布 x64 安装包。客户此前的安装卸载体验反馈仍为未关闭的人工验收项，完整业务功能尚未验收。Mac v0.2.1 已验收源码仍锚定 v0.2.1-macos（fbb54cf）。
 
 目标版本 Mac 0.2.1／Windows 0.2.2，功能基线 desktop-4。Mac 奇数、Windows 紧随偶数。版本号与功能清单是源码目标，不代表所有平台均已打包或通过实机验收。
 
-macOS 使用 AppKit／WKWebView 原生壳，内置 Python 仅监听系统分配的 127.0.0.1 端口。共享 server/backend/web 只维护一套业务算法。Windows 复用同一清单和同一虚构样本对照输出；已取得并保留Windows0.1.10宿主、安装/卸载和构建工程；本机没有Windows实机环境，0.2.2仍待desktop-4适配。
+macOS 使用 AppKit／WKWebView 原生壳，内置 Python 仅监听系统分配的 127.0.0.1 端口。共享 server/backend/web 只维护一套业务算法。Windows 复用同一清单、同一虚构样本和 desktop-4 协议，宿主使用 WinForms／WebView2；v0.2.2 已完成 Windows 技术验收，安装位置、启动与快捷方式选项、卸载方式和结果反馈均可实际操作。
 
 ## 构建
 
@@ -56,7 +56,7 @@ python3 -B desktop/measure_resources.py --pid 1234 --label idle --version 0.2.1 
 
 ## 分发边界
 
-本地构建仍仅 Intel Mac；ad-hoc 签名验证只保证包完整性，不等于 Developer ID 公证。arm64／Universal、正式公证、Windows 安装包和完整安装卸载矩阵分别验收。附件所述 Windows v0.1.10 缺陷是外部人工反馈，取得对应构建、截图和源码后再核验，不能算本机已复现或修复。
+Mac 本地构建仍仅 Intel Mac；ad-hoc 签名验证只保证包完整性，不等于 Developer ID 公证。arm64／Universal 和正式公证继续单独验收。Windows v0.2.2 已提供 x64 安装包并完成技术复验，但客户 GUI 安装／卸载体验、完整业务功能和首次／冷／热启动性能矩阵仍未验收；安装包未代码签名，需要 WebView2。
 
 
 下载发布先在目标同目录创建唯一私有暂存文件，流式复制、fsync 与哈希重读后，以 RENAME_EXCL 排他原子发布；最终文件名在完整数据就绪前不可见，源暂存文件由调用方统一清理。跨盘不直接写最终目标。若文件系统不支持排他原子重命名，明确失败并清理本次私有暂存，不退为暴露半写目标。物理 FAT/exFAT 仍需实机验证，不能仅凭强制复制测试宣称兼容通过。

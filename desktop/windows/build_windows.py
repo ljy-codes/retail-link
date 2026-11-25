@@ -30,8 +30,8 @@ UTF8_BOM = b"\xef\xbb\xbf"
 def validate_release(release):
     if not isinstance(release, dict):
         raise ValueError("发布配置必须是 JSON 对象。")
-    if release.get("featureLevel") != "desktop-3":
-        raise ValueError("Windows 发版必须复用 desktop-3 功能基线。")
+    if release.get("featureLevel") not in {"desktop-3", "desktop-4"}:
+        raise ValueError("Windows 发版必须复用 desktop-3 或 desktop-4 功能基线。")
     mac = _version(release.get("macVersion"), "macVersion")
     windows = _version(release.get("windowsVersion"), "windowsVersion")
     if mac[0:2] != windows[0:2]:
@@ -226,7 +226,7 @@ def build_payload(version, app_publish, runtime_zip, site_packages):
     shutil.copy2(DEV / "server.py", app / "server.py")
     for name in ("backend", "web"):
         copy_tree(DEV / name, app / name)
-    shutil.copy2(DESKTOP / "使用说明.html", app / "使用说明.html")
+    shutil.copy2(WINDOWS / "使用说明.html", app / "使用说明.html")
     metadata = windows_metadata(RELEASE)
     metadata["architecture"] = "x64"
     (app / "版本.json").write_text(
@@ -368,7 +368,7 @@ def publish(delivery, installer):
     staging.mkdir(parents=True)
     version = windows_metadata(RELEASE)["version"]
     shutil.copy2(installer, staging / installer.name)
-    shutil.copy2(DESKTOP / "使用说明.html", staging / f"零售通-v{version}-使用说明.html")
+    shutil.copy2(WINDOWS / "使用说明.html", staging / f"零售通-v{version}-使用说明.html")
     if len(list(staging.iterdir())) != 2:
         raise RuntimeError("Windows 交付目录必须仅有安装包和使用说明。")
     delivery = delivery.resolve()
@@ -403,13 +403,31 @@ def write_icon(path):
                 if (x - cx) ** 2 + (y - cy) ** 2 <= radius ** 2:
                     set_pixel(x, y, color)
 
-    rectangle(15, 15, 240, 240, 48, (24, 40, 56, 255))
-    rectangle(40, 86, 216, 204, 18, (34, 156, 157, 255))
-    rectangle(54, 54, 200, 110, 20, (156, 227, 220, 255))
-    for x, y, top in ((72, 148, 190), (113, 124, 190), (154, 100, 190)):
-        rectangle(x, y, x + 31, 190, 5, (243, 250, 250, 255))
-    rectangle(x, y, x + 31, 190, 5, (243, 250, 250, 255))
-    rectangle(x, y, x + 31, 190, 5, (243, 250, 250, 255))
+    # A light rounded tile with a strong red rising line remains legible at the
+    # 16 px sizes used by Explorer, the taskbar and the Start menu.
+    rectangle(13, 18, 243, 247, 50, (45, 12, 18, 48))
+    rectangle(12, 12, 243, 241, 50, (218, 38, 57, 255))
+    rectangle(23, 23, 232, 230, 40, (255, 248, 245, 255))
+
+    for x0, x1, top, color in (
+        (48, 69, 158, (248, 205, 211, 255)),
+        (84, 105, 133, (244, 179, 188, 255)),
+        (120, 141, 146, (239, 151, 164, 255)),
+        (156, 177, 104, (230, 112, 129, 255)),
+        (192, 213, 78, (218, 38, 57, 255)),
+    ):
+        rectangle(x0, top, x1, 203, 8, color)
+
+    points = ((48, 184), (82, 151), (128, 128), (170, 84), (210, 58))
+    for (x0, y0), (x1, y1) in zip(points, points[1:]):
+        steps = max(abs(x1 - x0), abs(y1 - y0))
+        for step in range(steps + 1):
+            x = round(x0 + (x1 - x0) * step / steps)
+            y = round(y0 + (y1 - y0) * step / steps)
+            rectangle(x - 7, y - 7, x + 7, y + 7, 7, (210, 35, 54, 255))
+    for x, y in points:
+        rectangle(x - 10, y - 10, x + 10, y + 10, 10, (255, 248, 245, 255))
+        rectangle(x - 6, y - 6, x + 6, y + 6, 6, (210, 35, 54, 255))
 
     raw = bytearray()
     for row in range(size):

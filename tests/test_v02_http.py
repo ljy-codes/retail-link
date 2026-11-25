@@ -283,7 +283,12 @@ class V02HttpTests(unittest.TestCase):
         path, _ = self.workbook()
         before = path.read_bytes()
         alias = host.ORIGINAL_DIR / "合成原件别名.xlsx"
-        alias.symlink_to(path)
+        try:
+            alias.symlink_to(path)
+        except OSError as error:
+            if getattr(error, "winerror", None) == 1314:
+                self.skipTest("当前 Windows 账号未启用创建符号链接的权限。")
+            raise
         inspection = self.success("/api/open", {"path": str(alias)})
         # Read-only intake remains available, but the write path must retain
         # evidence that the user selected a link rather than a plain original.
@@ -296,7 +301,12 @@ class V02HttpTests(unittest.TestCase):
         path, _ = self.workbook()
         before = path.read_bytes()
         alias_dir = self.folder / "来源目录别名"
-        alias_dir.symlink_to(host.ORIGINAL_DIR, target_is_directory=True)
+        try:
+            alias_dir.symlink_to(host.ORIGINAL_DIR, target_is_directory=True)
+        except OSError as error:
+            if getattr(error, "winerror", None) == 1314:
+                self.skipTest("当前 Windows 账号未启用创建符号链接的权限。")
+            raise
         inspection = self.success("/api/open", {"path": str(alias_dir / path.name)})
         self.enable_writeback()
         self.refused("/api/writeback/template", {"workbookId": inspection["workbookId"], "sheet": "业务",

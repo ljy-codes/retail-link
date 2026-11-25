@@ -109,7 +109,12 @@ class PublishTests(unittest.TestCase):
         self.assert_clean()
 
     def test_dangling_target_symlink_is_occupied(self):
-        self.target.symlink_to(self.root / "does-not-exist")
+        try:
+            self.target.symlink_to(self.root / "does-not-exist")
+        except OSError as error:
+            if getattr(error, "winerror", None) == 1314:
+                self.skipTest("当前 Windows 账号未启用创建符号链接的权限。")
+            raise
         with patch.object(file_publish.os, "link", side_effect=no_links):
             with self.assertRaises(FileExistsError):
                 file_publish.publish_no_clobber(self.source, self.target)

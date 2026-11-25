@@ -118,9 +118,9 @@ class SourceWritebackTests(unittest.TestCase):
     def test_pending_post_publish_record_can_restore_after_restart(self):
         result = self.store.commit(self.preview()["token"], True)
         meta = self.store.directory / "operations" / (result["id"] + ".json")
-        saved = json.loads(meta.read_text())
+        saved = json.loads(meta.read_text(encoding="utf-8"))
         saved["status"] = "prepared"
-        meta.write_text(json.dumps(saved))
+        meta.write_text(json.dumps(saved), encoding="utf-8")
         restarted = SourceWriteback(self.folder / "runtime")
         restarted.restore(result["id"], True)
         self.assertEqual(self.path.read_bytes(), self.before)

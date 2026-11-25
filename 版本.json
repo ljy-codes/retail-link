@@ -4,8 +4,8 @@
   "platform": "windows",
   "featureLevel": "desktop-4",
   "pairedMacVersion": "0.2.1",
-  "buildStatus": "planned",
-  "targetDate": "2026-11-24",
+  "buildStatus": "built-verified",
+  "releaseDate": "2026-11-25",
   "sharedSourceCommit": "b48c6e7f6c2d00f3f031aedb2bce7e1a79b8c678",
-  "lastVerifiedWindowsTag": "v0.1.10-windows"
+  "lastVerifiedWindowsTag": "v0.2.2-windows"
 }

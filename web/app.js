@@ -225,7 +225,7 @@ async function acceptInspection(inspection,configured){
  if(!inspection.workbookId)throw new Error('文件已解析，但未获得文件标识，请重新导入。');
  const previous=Object.fromEntries(['inspection','workbookId','config','result','health','historySnapshot','pendingImport','selectedSheet','previewOffset','previewTarget','preview','activeTab','selectedProduct','search','statusFilter','issueFilter'].map(key=>[key,state[key]]));
  state.inspection=inspection;state.workbookId=inspection.workbookId;state.config=clone(configured||inspection.config||{});state.config.overrides={};state.result=null;state.health=null;state.historySnapshot=null;state.pendingImport=null;state.selectedSheet=null;state.previewTarget=null;state.previewOffset=0;state.preview=null;state.activeTab='dashboard';state.selectedProduct=null;state.search='';state.statusFilter='all';state.issueFilter='all';
- try{await analyze();}catch(error){Object.assign(state,previous);state.pendingImport={inspection,config:clone(configured||inspection.config||{}),error:error.message};render();throw error;}
+ try{await analyze();window.RetailLinkWorkspace?.invalidate('config');state.configDraft=null;}catch(error){Object.assign(state,previous);state.pendingImport={inspection,config:clone(configured||inspection.config||{}),error:error.message};render();throw error;}
 }
 async function loadHealthReport(id=state.result?.id, deleted=Boolean(state.historySnapshot?.deleted)){
  if(!id)return;
@@ -276,6 +276,7 @@ async function openHistoryRecord(id){
   const data=await api(`/api/history/${encodeURIComponent(id)}`),result=data.result;
   if(!result||!Array.isArray(result.products))throw new Error('此历史记录缺少完整看盘结果。');
   const item=state.historyItems.find(item=>String(item.id)===String(id));
+  if(String(state.result?.id)!==String(id)){window.RetailLinkWorkspace?.invalidate('config');state.configDraft=null;}
   state.result=result;state.config=clone(result.config||{});state.health=null;
   state.inspection=data.inspection||{filename:result.filename,sheets:[],mappingSchema:[],config:clone(state.config),workbookId:null};
   const available=Boolean(data.sourceAvailable&&data.inspection?.workbookId);
@@ -551,7 +552,7 @@ document.addEventListener('drop',event=>{event.preventDefault();dragDepth=0;$('#
 function bootWorkspace(){
  const workspace=window.RetailLinkWorkspace;if(!workspace)return;
  workspace.register('dashboard',{root:document.getElementById('app'),title:'电商看盘',nav:document.querySelector('[data-nav="dashboard"]')});
- workspace.register('history',{title:'历史记录',nav:document.querySelector('[data-action="open-history"].nav-item'),open:()=>openHistory(false,0)});
+ workspace.register('history',{title:'历史记录',nav:document.querySelector('[data-action="open-history"].nav-item'),open:()=>openHistory(false,0),onActivate:fetchHistory});
  workspace.register('config',{title:'分析配置',nav:document.querySelector('[data-action="open-config"].nav-item'),open:openConfig,beforeLeave:()=>{if(state.configDraft&&document.getElementById('cfg-period'))captureConfig();}});
  workspace.register('data',{title:'本地数据与记录',nav:document.querySelector('[data-action="open-data-tools"].nav-item'),open:openDataTools});
  const importNav=document.querySelector('[data-action="open-import"].nav-item');if(importNav)importNav.dataset.workspaceNav='import';

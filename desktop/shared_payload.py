@@ -23,6 +23,10 @@ _PRIVATE_SUFFIXES = {
     ".xlsx", ".xlsm", ".xls", ".sqlite3", ".sqlite", ".db", ".jsonl",
     ".csv", ".log", ".part", ".tmp",
 }
+_SYSTEM_ALIASES = {
+    "/var": "/private/var",
+    "/tmp": "/private/tmp",
+}
 
 
 def check_size(size, label):
@@ -31,7 +35,16 @@ def check_size(size, label):
 
 
 def _linked(path):
-    return path.is_symlink() or getattr(path, "is_junction", lambda: False)()
+    path = Path(path)
+    if path.is_symlink():
+        # macOS exposes temporary directories through root-owned aliases such as
+        # /var -> /private/var. These are trusted system paths, not user-selected
+        # links that could redirect a build destination outside its workspace.
+        alias = _SYSTEM_ALIASES.get(str(path))
+        if alias and path.lstat().st_uid == 0 and path.resolve() == Path(alias):
+            return False
+        return True
+    return getattr(path, "is_junction", lambda: False)()
 
 
 def check_destination(path):

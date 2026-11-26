@@ -52,6 +52,12 @@ class SharedPayloadTests(unittest.TestCase):
         self.assertTrue(path.is_file(), "missing shared payload implementation")
         return load_script("desktop/shared_payload.py")
 
+    def test_trusted_macos_system_alias_does_not_block_temp_workspace(self):
+        if sys.platform != "darwin":
+            self.skipTest("macOS system aliases are not present on this platform")
+        shared = self.shared()
+        self.assertEqual(shared.check_destination(self.root), self.root)
+
     def sparse(self, path):
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("wb") as stream:
@@ -248,8 +254,16 @@ class SharedPayloadTests(unittest.TestCase):
     def test_source_case_collisions_are_rejected_before_copy(self):
         shared = self.shared()
         # These Unicode names coexist on Windows but collide under casefold.
-        (self.repo / "backend/straße.py").write_bytes(b"one")
-        (self.repo / "backend/STRASSE.py").write_bytes(b"two")
+        first = self.repo / "backend/straße.py"
+        second = self.repo / "backend/STRASSE.py"
+        first.write_bytes(b"one")
+        second.write_bytes(b"two")
+        try:
+            same_file = first.samefile(second)
+        except FileNotFoundError:
+            same_file = False
+        if same_file:
+            self.skipTest("当前文件系统已按大小写合并测试文件，无法构造两个并存路径")
         with self.assertRaises(ValueError):
             shared.copy_shared_payload(self.repo, self.root / "payload", [])
         self.assertFalse((self.root / "payload").exists())

@@ -1,5 +1,16 @@
 # 本轮整理与自测
 
+## 2026-11-26｜Mac v0.2.7 A02 候选复核
+
+本次按用户授权只推进 `macos` 分支和 `main` 共享契约，不修改 `windows` 分支。Mac 候选版本从共享配对规则确定为 **v0.2.7**，Windows 配对参考为 **v0.2.8**。
+
+- A02「通路」SVG 已作为唯一图标源；`desktop/build_macos.py` 使用 macOS `sips` 将该 SVG 栅格化，再生成 `AppIcon.png`、`RetailLink.icns` 和 `RetailLink.ico`。构建产物抽检为 1024×1024 PNG，中心像素为 A02 浅薄荷色，ICNS 类型可识别。
+- Mac 构建命令：`python3 -B desktop/build_macos.py --python-runtime /Users/xiaoyu/.cache/codex-runtimes/codex-primary-runtime/dependencies/python --publish`。
+- DMG 校验通过：`hdiutil verify` 返回 `VALID`。本地候选文件：`零售通-v0.2.7-mac-Intel.dmg`（SHA-256 `5df39ab881922f3c51927933b75a74314a7b3be85349847736a3d8674f2c5239`）和匹配 HTML（SHA-256 `1c6c566eeaac74a94f1d2074631388f6606315bcf5046d4da788706aaa1c8f62`）。
+- `tests/test_desktop_package.py --app desktop/build/macos/零售通.app`：5 项通过；A02 图标源测试 3 项通过；共享载荷专项 25 项通过、1 项因 macOS 大小写不敏感文件系统无法构造冲突路径而跳过。
+- 全量 Python 回归：`328 tests`，`OK (skipped=13)`；Node.js 语法检查通过。测试覆盖的是隔离数据和包内容，未代替真实安装、升级、卸载和人工视觉验收。
+- 当前仍未完成：Mac 原生窗口人工复验、DMG 安装/升级/卸载实机闭环、Apple Silicon、Developer ID 公证、统一冷/热启动和完整进程树资源基线，以及真实 7 天业务对账。
+
 ## 2026-11-26｜Run ID：ORG-PARITY-20261126
 
 当前结论：本机可执行的整理、卸载、构建和自动化自测已完成，**跨平台完整验收仍不完整**。Mac原生环境不可用，Windows安装、升级及卸载向导按用户要求未执行；最终安装由用户进行。以下保留阶段记录，最新结果见文末收尾段。

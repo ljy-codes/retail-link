@@ -60,6 +60,10 @@ final class RetailLinkApplication: NSObject, NSApplicationDelegate, NSWindowDele
     private var uninstalling = false
     private var lockDescriptor: Int32 = -1
     private var downloads: [ObjectIdentifier: PendingDownload] = [:]
+    private var featureWindows: [ObjectIdentifier: NSWindow] = [:]
+    private var featureViews: [ObjectIdentifier: WKWebView] = [:]
+    private var featureTitleObservers: [ObjectIdentifier: NSKeyValueObservation] = [:]
+    private var closingFeatureWindows = Set<ObjectIdentifier>()
     private let fileManager = FileManager.default
     private var testRoot: URL? {
         guard let path = ProcessInfo.processInfo.environment["RETAIL_LINK_TEST_ROOT"], !path.isEmpty else { return nil }
@@ -713,6 +717,44 @@ final class RetailLinkApplication: NSObject, NSApplicationDelegate, NSWindowDele
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
 
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        if sender === window {
+            writeLifecycleLog("main_window_close_requested")
+            NSApp.terminate(nil)
+            return false
+        }
+        guard let feature = featureWindows.first(where: { $0.value === sender }),
+            let featureView = featureViews[feature.key] else { return true }
+        let key = ObjectIdentifier(sender)
+        if closingFeatureWindows.contains(key) { return true }
+        closingFeatureWindows.insert(key)
+        writeLifecycleLog("feature_window_close_requested")
+        // Restore the very same feature DOM to the parent before destroying the
+        // child WebView. This preserves unsaved fields and preview tokens.
+        featureView.evaluateJavaScript("window.name") { [weak self, weak sender] result, _ in
+            guard let self = self else { sender?.close(); return }
+            let name = result as? String ?? ""
+            let route = name.hasPrefix("retail-link-") ? String(name.dropFirst("retail-link-".count)) : ""
+            let quoted = (try? JSONSerialization.data(withJSONObject: route, options: .fragmentsAllowed))
+                .flatMap { String(data: $0, encoding: .utf8) } ?? "\"\""
+            self.webView.evaluateJavaScript("window.RetailLinkWorkspace?.restore(\(quoted))") { [weak sender] _, _ in
+                sender?.close()
+            }
+        }
+        return false
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        guard let closed = notification.object as? NSWindow,
+            let entry = featureWindows.first(where: { $0.value === closed }) else { return }
+        featureViews[entry.key]?.stopLoading()
+        featureViews.removeValue(forKey: entry.key)
+        featureTitleObservers.removeValue(forKey: entry.key)
+        featureWindows.removeValue(forKey: entry.key)
+        closingFeatureWindows.remove(ObjectIdentifier(closed))
+        writeLifecycleLog("feature_window_closed")
+    }
+
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         window?.makeKeyAndOrderFront(nil)
         return true
@@ -737,6 +779,9 @@ final class RetailLinkApplication: NSObject, NSApplicationDelegate, NSWindowDele
         }
         downloads.removeAll()
         webView?.configuration.userContentController.removeScriptMessageHandler(forName: "retailLinkDesktop")
+        for view in featureViews.values { view.stopLoading() }
+        for child in featureWindows.values { child.orderOut(nil) }
+        featureTitleObservers.removeAll(); featureViews.removeAll(); featureWindows.removeAll(); closingFeatureWindows.removeAll()
         if lockDescriptor >= 0 { flock(lockDescriptor, LOCK_UN); close(lockDescriptor); lockDescriptor = -1 }
     }
 
@@ -760,6 +805,10 @@ final class RetailLinkApplication: NSObject, NSApplicationDelegate, NSWindowDele
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        if let child = featureWindows[ObjectIdentifier(webView)] {
+            if let title = webView.title, !title.isEmpty { child.title = title }
+            return
+        }
         guard isLocal(webView.url) else { return }
         startupStage = "准备工作台数据与操作入口"
         writeLifecycleLog("page_loaded")
@@ -782,7 +831,9 @@ final class RetailLinkApplication: NSObject, NSApplicationDelegate, NSWindowDele
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
         decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
         let url = navigationAction.request.url
-        if navigationAction.shouldPerformDownload && isLocalDownload(url) {
+        if featureWindows[ObjectIdentifier(webView)] != nil && url?.absoluteString == "about:blank" {
+            decisionHandler(.allow)
+        } else if navigationAction.shouldPerformDownload && isLocalDownload(url) {
             decisionHandler(.download)
         } else if isLocal(url) {
             decisionHandler(.allow)
@@ -797,6 +848,9 @@ final class RetailLinkApplication: NSObject, NSApplicationDelegate, NSWindowDele
 
     func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse,
         decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
+        if featureWindows[ObjectIdentifier(webView)] != nil && navigationResponse.response.url?.absoluteString == "about:blank" {
+            decisionHandler(.allow); return
+        }
         guard isLocalDownload(navigationResponse.response.url) else { decisionHandler(.cancel); return }
         let attachment = (navigationResponse.response as? HTTPURLResponse)?
             .value(forHTTPHeaderField: "Content-Disposition")?.lowercased().contains("attachment") == true
@@ -805,6 +859,26 @@ final class RetailLinkApplication: NSObject, NSApplicationDelegate, NSWindowDele
 
     func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
         for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
+        writeLifecycleLog("feature_window_request", extra: ["url": navigationAction.request.url?.absoluteString ?? "", "localSource": isLocal(webView.url)])
+        // WebKit can report an empty source securityOrigin during blank-window
+        // creation. The owning WebView is already constrained to our endpoint.
+        if navigationAction.request.url?.absoluteString == "about:blank",
+            isLocal(webView.url) || featureWindows[ObjectIdentifier(webView)] != nil {
+            let view = WKWebView(frame: .zero, configuration: configuration)
+            view.navigationDelegate = self; view.uiDelegate = self
+            let child = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1180, height: 820),
+                styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
+            child.title = "零售通 · 独立工作窗口"
+            child.minSize = NSSize(width: 760, height: 560)
+            child.contentView = view; child.delegate = self; child.isReleasedWhenClosed = false
+            featureWindows[ObjectIdentifier(view)] = child; featureViews[ObjectIdentifier(view)] = view
+            featureTitleObservers[ObjectIdentifier(view)] = view.observe(\.title, options: [.new]) { [weak child] current, _ in
+                if let title = current.title, !title.isEmpty { child?.title = title }
+            }
+            child.center(); child.makeKeyAndOrderFront(nil)
+            writeLifecycleLog("feature_window_opened")
+            return view
+        }
         if let url = navigationAction.request.url {
             if isLocalDownload(url) { webView.load(navigationAction.request) }
             else if navigationAction.navigationType == .linkActivated, ["http", "https"].contains(url.scheme ?? "") {
@@ -812,6 +886,10 @@ final class RetailLinkApplication: NSObject, NSApplicationDelegate, NSWindowDele
             }
         }
         return nil
+    }
+
+    func webViewDidClose(_ webView: WKWebView) {
+        featureWindows[ObjectIdentifier(webView)]?.performClose(nil)
     }
 
     func webView(_ webView: WKWebView, runOpenPanelWith parameters: WKOpenPanelParameters,
@@ -823,7 +901,7 @@ final class RetailLinkApplication: NSObject, NSApplicationDelegate, NSWindowDele
         panel.canChooseFiles = true
         panel.canChooseDirectories = parameters.allowsDirectories
         panel.allowsMultipleSelection = parameters.allowsMultipleSelection
-        panel.beginSheetModal(for: window) { [weak self] result in
+        panel.beginSheetModal(for: webView.window ?? window) { [weak self] result in
             self?.panelActive = false
             completionHandler(result == .OK ? panel.urls : nil)
         }
@@ -837,7 +915,7 @@ final class RetailLinkApplication: NSObject, NSApplicationDelegate, NSWindowDele
         alert.messageText = applicationName
         alert.informativeText = message
         alert.addButton(withTitle: "确定")
-        alert.beginSheetModal(for: window) { [weak self] _ in self?.panelActive = false; completionHandler() }
+        alert.beginSheetModal(for: webView.window ?? window) { [weak self] _ in self?.panelActive = false; completionHandler() }
     }
 
     func webView(_ webView: WKWebView, runJavaScriptConfirmPanelWithMessage message: String,
@@ -849,7 +927,7 @@ final class RetailLinkApplication: NSObject, NSApplicationDelegate, NSWindowDele
         alert.informativeText = message
         alert.addButton(withTitle: "确认")
         alert.addButton(withTitle: "取消")
-        alert.beginSheetModal(for: window) { [weak self] response in
+        alert.beginSheetModal(for: webView.window ?? window) { [weak self] response in
             self?.panelActive = false
             completionHandler(response == .alertFirstButtonReturn)
         }

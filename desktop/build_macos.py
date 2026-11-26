@@ -6,6 +6,7 @@ from pathlib import Path
 import plistlib
 import subprocess
 import sys
+import tempfile
 
 DESKTOP = Path(__file__).resolve().parent
 DEV = DESKTOP.parent
@@ -56,19 +57,21 @@ def runtime(source, destination):
 def icon(resources):
     shared.check_destination(resources)
     shared.check_destination(BUILD)
-    from PIL import Image, ImageDraw
-    image = Image.new("RGBA", (1024, 1024))
-    draw = ImageDraw.Draw(image)
-    # Customer-selected red identity with a white operating trend line.
-    draw.rounded_rectangle((60, 60, 964, 964), radius=202, fill="#F8E7E5")
-    draw.rounded_rectangle((125, 125, 899, 899), radius=165, fill="#BE3835")
-    draw.line([(254, 684), (254, 346)], fill="#E8A5A1", width=32)
-    draw.line([(254, 684), (779, 684)], fill="#E8A5A1", width=32)
-    points = [(285, 596), (423, 491), (553, 548), (723, 355)]
-    draw.line(points, fill="#FFFFFF", width=70, joint="curve")
-    for x, y in points:
-        draw.ellipse((x - 34, y - 34, x + 34, y + 34), fill="#FFFFFF")
-    draw.ellipse((672, 304, 774, 406), fill="#FFFFFF")
+    from PIL import Image
+    source = ROOT / "docs/设计/图标概念/零售通-A02-通路.svg"
+    source_bytes = shared.read_bytes(source, ROOT)
+    for color in (b"#0B4F4A", b"#DEFFF2"):
+        if color not in source_bytes:
+            raise ValueError(f"A02图标源缺少确认色值：{color.decode()}")
+    # Rasterize the single approved SVG source with the macOS system tool. This
+    # keeps the SVG as the source of truth while avoiding a new Python SVG
+    # dependency in the portable build runtime.
+    with tempfile.TemporaryDirectory(prefix=".a02-icon-", dir=BUILD) as directory:
+        raster = Path(directory) / "a02.png"
+        run("sips", "-s", "format", "png", source, "--out", raster,
+            stdout=subprocess.DEVNULL)
+        shared.checked_file(raster, Path(directory))
+        image = Image.open(raster).convert("RGBA").resize((1024, 1024), Image.Resampling.LANCZOS)
     (resources / "AppIcon.png").parent.mkdir(parents=True, exist_ok=True)
     image.save(resources / "AppIcon.png")
     image.save(resources / "RetailLink.ico", sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])

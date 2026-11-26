@@ -96,6 +96,11 @@ internal sealed class BackendManager : IAsyncDisposable
         process.ErrorDataReceived += (_, args) => AppendOutput(args.Data);
         process.Exited += (_, _) =>
         {
+            if (!ReferenceEquals(_process, process))
+            {
+                return;
+            }
+            BackendUri = null;
             if (!_intentionalStop)
             {
                 Exited?.Invoke(process.ExitCode, Output);
@@ -133,6 +138,11 @@ internal sealed class BackendManager : IAsyncDisposable
             if (TryReadReady(readyFile, process.Id, expectedVersion, out var uri, out var problem))
             {
                 BackendUri = uri!;
+                if (!ReferenceEquals(_process, process) || process.HasExited)
+                {
+                    BackendUri = null;
+                    throw new InvalidOperationException("本地服务已停止，请重新启动。");
+                }
                 return uri!;
             }
             if (problem is not null && DateTime.UtcNow > deadline.AddSeconds(-30))

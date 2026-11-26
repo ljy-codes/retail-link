@@ -1,7 +1,7 @@
 {
   "featureLevel": "desktop-4",
   "macVersion": "0.2.1",
-  "windowsVersion": "0.2.2",
+  "windowsVersion": "0.2.8",
   "minimumMacOS": "13.0",
   "features": [
     "reviewed_import",
@@ -9,6 +9,7 @@
     "dashboard",
     "daily_prices_sales",
     "history_restore",
+    "data_health",
     "safe_excel_export",
     "data_migration",
     "audit_log",

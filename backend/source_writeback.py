@@ -84,7 +84,7 @@ class SourceWriteback:
 
     def _read(self, name, default):
         p = self.directory / name
-        return json.loads(p.read_text()) if p.exists() else default
+        return json.loads(p.read_text(encoding="utf-8")) if p.exists() else default
 
     def settings(self, enabled=None):
         with _LOCK:
@@ -277,9 +277,13 @@ class SourceWriteback:
         target.parent.mkdir(parents=True, exist_ok=True)
         if target.is_symlink():
             raise ValueError("备份目标不能是链接。")
-        shutil.copy2(source, target)
-        with target.open("rb") as stream:
+        # Copy metadata only after flushing. Windows copied read-only attributes
+        # make the target impossible to reopen for FlushFileBuffers.
+        shutil.copyfile(source, target)
+        with target.open("rb+") as stream:
+            stream.flush()
             os.fsync(stream.fileno())
+        shutil.copystat(source, target)
 
     def commit(self, token, confirmed=False):
         with _LOCK:
@@ -336,7 +340,8 @@ class SourceWriteback:
                         raise ValueError("写回副本重读与预期不一致，原件未改动。")
                 finally:
                     check.close()
-                with pending.open("rb") as stream:
+                with pending.open("rb+") as stream:
+                    stream.flush()
                     os.fsync(stream.fileno())
                 record["afterSha256"] = sha(pending)
                 _atomic_json(meta, record)
@@ -364,7 +369,7 @@ class SourceWriteback:
 
     def history(self):
         directory = self.directory / "operations"
-        records = [json.loads(p.read_text()) for p in directory.glob("*.json")] if directory.exists() else []
+        records = [json.loads(p.read_text(encoding="utf-8")) for p in directory.glob("*.json")] if directory.exists() else []
         return {"items": sorted(records, key=lambda x: x["createdAt"], reverse=True)}
 
     def restore(self, identifier, confirmed=False):
@@ -372,7 +377,7 @@ class SourceWriteback:
             if not confirmed or not isinstance(identifier, str) or len(identifier) != 32 or any(c not in "0123456789abcdef" for c in identifier):
                 raise ValueError("请确认要恢复的写回记录。")
             meta = self.directory / "operations" / f"{identifier}.json"
-            record = json.loads(meta.read_text())
+            record = json.loads(meta.read_text(encoding="utf-8"))
             path, backup = Path(record["path"]), Path(record["backup"])
             if backup.parent != self.directory / "backups" or backup.is_symlink() or sha(backup) != record["backupSha256"]:
                 raise ValueError("备份已变化，拒绝恢复。")

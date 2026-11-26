@@ -74,6 +74,27 @@ main{padding:31px 36px 0;max-width:1680px;margin:auto}
 .source-caption{font-size:calc(11px * var(--ui-scale,1));color:var(--muted);margin-top:2px}
 .source-time{margin-left:auto;font-size:calc(12px * var(--ui-scale,1));color:var(--text-secondary,var(--ink));white-space:nowrap;display:flex;align-items:center;gap:7px}
 .source-time .icon{width:14px;height:14px}
+.health-card{padding:20px 22px;margin-bottom:20px}
+.health-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+.health-heading p{margin:7px 0 0;color:var(--muted);font-size:calc(11px * var(--ui-scale,1))}
+.health-status{flex:none;border-radius:5px;padding:4px 9px;font-size:calc(11px * var(--ui-scale,1));background:var(--amber-soft);color:var(--amber)}
+.health-status.ready,.health-status.available{background:var(--green-soft);color:var(--green)}
+.health-status.blocked{background:var(--red-soft);color:var(--red)}
+.health-status.pending{background:var(--surface-subtle,var(--paper));color:var(--muted)}
+.health-scope{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0 13px}
+.health-scope span{border:1px solid var(--line);border-radius:5px;padding:3px 8px;color:var(--text-secondary,var(--ink));font-size:calc(11px * var(--ui-scale,1))}
+.health-metrics{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
+.health-metric{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;padding:11px 12px;background:var(--surface-subtle,var(--paper));border-radius:7px;min-height:74px}
+.health-metric strong{display:block;font-size:calc(11px * var(--ui-scale,1));font-weight:600}
+.health-metric small{display:block;color:var(--muted);font-size:calc(10px * var(--ui-scale,1));line-height:1.55;margin-top:5px}
+.health-metric-status{flex:none;color:var(--amber);font-size:calc(10px * var(--ui-scale,1));white-space:nowrap}
+.health-metric-status.available{color:var(--green)}
+.health-metric-status.blocked{color:var(--red)}
+.health-next{border-top:1px dashed var(--line);margin-top:14px;padding-top:11px;color:var(--muted);font-size:calc(11px * var(--ui-scale,1))}
+.health-next strong{color:var(--text-secondary,var(--ink));font-weight:600}
+.health-next ul{display:flex;flex-wrap:wrap;gap:4px 22px;margin:5px 0 0;padding-left:17px}
+.health-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:13px;color:var(--muted);font-size:calc(11px * var(--ui-scale,1))}
+.health-empty{color:var(--muted);padding:10px 0}
 .kpi-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin-bottom:20px}
 .kpi{padding:20px 20px 17px;position:relative;overflow:hidden}
 .kpi-header{display:flex;align-items:center;justify-content:space-between;color:var(--text-secondary,var(--ink));font-size:calc(12px * var(--ui-scale,1));margin-bottom:14px}
@@ -397,6 +418,7 @@ main{padding-left:24px;padding-right:24px}
 .heading-actions .btn{font-size:calc(11px * var(--ui-scale,1))}
 .heading-actions .btn .icon{width:14px}
 .kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.health-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
 .kpi-value{font-size:calc(29px * var(--ui-scale,1))}
 .overview-grid{grid-template-columns:1fr}
 .attention-list{grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
@@ -439,6 +461,9 @@ main{padding:23px 16px 0}
 .kpi-footer strong{display:block;margin-top:3px}
 .kpi-microbar{margin-top:10px}
 .source-strip{padding:11px;gap:9px}
+.health-card{padding:16px}
+.health-metrics{grid-template-columns:1fr}
+.health-footer{align-items:flex-start;flex-direction:column}
 .excel-mark{height:31px;width:29px}
 .source-info strong{font-size:calc(11px * var(--ui-scale,1));max-width:170px}
 .source-info{gap:5px}

@@ -73,7 +73,7 @@ import Foundation
         }
         let support = root.appendingPathComponent("support")
         let library = root.appendingPathComponent("library")
-        for name in ["history", "logs", "导入文件", "原始资料", "生成文件", "exports", "unknown-user-files"] {
+        for name in ["history", "logs", "import_sessions", "导入文件", "原始资料", "生成文件", "exports", "unknown-user-files"] {
             try fm.createDirectory(at: support.appendingPathComponent(name), withIntermediateDirectories: true)
         }
         let scopedFiles = ["operations/state.json", "writeback/settings.json", "writeback/templates.json"]
@@ -87,7 +87,7 @@ import Foundation
         try check(ordinary == [first.target], "ordinary_uninstall_app_only")
         let complete = try LifecycleFiles.cleanupPlan(bundle: first.target, support: support, library: library, complete: true)
         let names = Set(complete.map { $0.lastPathComponent })
-        try check(names == Set(["零售通.app", "history", "logs", "state.json", "settings.json", "templates.json"]), "complete_uninstall_allowlist_preserves_sources_outputs_backups_unknown")
+        try check(names == Set(["零售通.app", "history", "logs", "import_sessions", "state.json", "settings.json", "templates.json"]), "complete_uninstall_allowlist_preserves_sources_outputs_backups_unknown")
         let selectedPaths = Set(complete.map { $0.path })
         try check(scopedFiles.allSatisfy { selectedPaths.contains(support.appendingPathComponent($0).path) }, "complete_uninstall_selects_exact_ledger_and_writeback_settings")
         try check(!selectedPaths.contains(support.appendingPathComponent("operations").path) && !selectedPaths.contains(support.appendingPathComponent("writeback").path), "complete_uninstall_never_selects_ledger_or_writeback_parent_directory")

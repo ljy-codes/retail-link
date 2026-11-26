@@ -2,10 +2,13 @@
   "name": "零售通",
   "version": "0.2.1",
   "featureLevel": "desktop-4",
-  "pairedWindowsVersion": "0.2.2",
+  "pairedWindowsVersion": "0.2.8",
   "releaseDate": "2026-11-24",
   "platform": "mac",
-  "buildStatus": "intel-trial-verified",
-  "sharedSourceCommit": "b48c6e7f6c2d00f3f031aedb2bce7e1a79b8c678",
-  "verifiedBuildSourceCommit": "fbb54cf3ac91fa90ba884e0479f7063d9f505287"
+  "buildStatus": "source-synced-awaiting-macos-build-and-acceptance",
+  "sharedSourceCommit": "a2c9ce83ea427acc944f15490e2a0605d93bd391",
+  "verifiedBuildSourceCommit": "fbb54cf3ac91fa90ba884e0479f7063d9f505287",
+  "lastVerifiedMacTag": "v0.2.1-macos",
+  "sourceSyncDate": "2026-11-26",
+  "candidatePurpose": "共享源码已对齐；旧Mac包不变，本轮未编译或实机验收"
 }

@@ -375,7 +375,7 @@ class OperationsTests(unittest.TestCase):
 
     def test_portable_state_validation_rejects_unknown_schema_nonfinite_and_forged_conversion(self):
         self.save("shipments", [self.shipment()])
-        state = json.loads(self.store.path.read_text())
+        state = json.loads(self.store.path.read_text(encoding="utf-8"))
         self.assertIs(validate_state(state), state)
         for changed in [dict(state, unknown=True), dict(state, version=999), dict(state, generation=-1)]:
             with self.assertRaises(ValueError):

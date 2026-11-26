@@ -107,12 +107,16 @@ class IdentityTests(unittest.TestCase):
         path = self.root / "legacy"
         path.mkdir()
         ident = "a" * 32
-        with sqlite3.connect(path / "daily.sqlite3") as db:
+        db = sqlite3.connect(path / "daily.sqlite3")
+        try:
             db.executescript('''CREATE TABLE daily_records(id TEXT PRIMARY KEY,date TEXT,product TEXT,name TEXT,shop TEXT,price REAL,salesQuantity REAL,source TEXT,createdAt TEXT,updatedAt TEXT,deleted INTEGER,revision INTEGER,UNIQUE(date,product,shop));
                 CREATE TABLE daily_revisions(seq INTEGER PRIMARY KEY AUTOINCREMENT,recordId TEXT,savedAt TEXT,action TEXT,snapshot TEXT);
                 CREATE TABLE product_catalog(sourceProduct TEXT,sourceShop TEXT,product TEXT,name TEXT,specification TEXT,shop TEXT,source TEXT,revision INTEGER,updatedAt TEXT,PRIMARY KEY(sourceProduct,sourceShop));''')
             db.execute("INSERT INTO daily_records VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", [ident, "2025-11-01", "OLD", "旧名", "旧仓", 0, None, '"手工"', "2025-11-01", "2025-11-01", 0, 3])
             db.execute("INSERT INTO product_catalog VALUES(?,?,?,?,?,?,?,?,?)", ["OLD", "旧仓", "STANDARD", "旧名", "1件", "标准仓", '"人工"', 2, "2025-11-01T00:00:00+08:00"])
+            db.commit()
+        finally:
+            db.close()
         self.assertEqual(MigrationService._validate_database(path / "daily.sqlite3")["dailyRecords"], 1)
         upgraded = DailyStore(path)
         old = upgraded.get(ident)

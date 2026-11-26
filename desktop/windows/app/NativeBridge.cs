@@ -12,6 +12,8 @@ internal sealed class NativeBridge
     private readonly Form _owner;
     private readonly Func<int?> _backendPort;
 
+    public event Action? FrontendReady;
+
     public NativeBridge(WebView2 webView, Form owner, Func<int?> backendPort)
     {
         _webView = webView;
@@ -33,9 +35,20 @@ internal sealed class NativeBridge
             using var document = JsonDocument.Parse(args.WebMessageAsJson);
             var root = document.RootElement;
             if (root.ValueKind != JsonValueKind.Object
-                || !root.TryGetProperty("id", out identifier)
                 || !root.TryGetProperty("action", out var actionNode)
                 || actionNode.ValueKind != JsonValueKind.String)
+            {
+                return;
+            }
+
+            var action = actionNode.GetString();
+            if (action == "frontendReady")
+            {
+                FrontendReady?.Invoke();
+                return;
+            }
+
+            if (!root.TryGetProperty("id", out identifier))
             {
                 return;
             }
@@ -44,7 +57,6 @@ internal sealed class NativeBridge
                 return;
             }
 
-            var action = actionNode.GetString();
             var result = action switch
             {
                 "chooseDirectory" => ChooseDirectory(root),

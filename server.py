@@ -125,6 +125,11 @@ def resource_directory():
         bundle = next((parent for parent in (APP_DIR, *APP_DIR.parents) if parent.suffix.lower() == ".app"), None)
         if bundle is not None:
             return bundle.resolve()
+        # The Windows payload has app/ beside its executable and runtime/.
+        # Protect the whole install, just as macOS protects the whole bundle:
+        # upgrades replace that directory, including any misplaced exports.
+        if APP_DIR.name.lower() == "app" and (APP_DIR.parent / "零售通.exe").is_file():
+            return APP_DIR.parent.resolve()
     return APP_DIR.resolve()
 
 
@@ -512,7 +517,7 @@ class Handler(BaseHTTPRequestHandler):
                                        "sampleAvailable": SAMPLE.is_file(),
                                        "defaultDirectory": str(ORIGINAL_DIR),
                                        "defaultExportDirectory": str(export_directory()),
-                                       "capabilities": ["excel", "directory", "manual", "mapping", "history", "local_export", "migration", "multi_import", "format_review", "operations", "source_writeback"]})
+                                       "capabilities": ["excel", "directory", "manual", "mapping", "history", "local_export", "migration", "multi_import", "format_review", "operations", "data_health", "source_writeback"]})
             if parsed.path == "/api/import/templates":
                 return self.send_json({"templates": dataset_service().templates()})
             if self.dispatch_daily("GET", parsed):
@@ -535,6 +540,14 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json(history_store().list(
                     offset=query.get("offset", [0])[0], limit=query.get("limit", [50])[0],
                     deleted=query.get("deleted", ["0"])[0] == "1"))
+            if parsed.path == "/api/health/report":
+                from backend.data_health import build_health_report
+                query = parse_qs(parsed.query)
+                identifier = query.get("snapshotId", [""])[0]
+                if not identifier:
+                    raise ValueError("请指定分析快照。")
+                result = history_store().get(identifier, deleted=query.get("deleted", ["0"])[0] == "1")
+                return self.send_json(build_health_report(result))
             if parsed.path == "/api/preferences":
                 return self.send_json({"preferences": migration_service().load_preferences()})
             if parsed.path.startswith("/api/export/download/"):

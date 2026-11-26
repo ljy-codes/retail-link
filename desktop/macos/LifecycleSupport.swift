@@ -11,7 +11,7 @@ enum LifecycleFailure: LocalizedError {
 enum LifecycleFiles {
     static let applicationID = "com.retaillink.desktop.mac"
     static let removableData = ["history", "history_deleted", "daily.sqlite3", "daily.sqlite3-wal", "daily.sqlite3-shm",
-        "preferences.json", "import_templates.json", "dataset_templates.json", "format_baselines.json",
+        "preferences.json", "import_templates.json", "import_sessions", "dataset_templates.json", "format_baselines.json",
         "desktop_onboarding.json", "desktop-install.json", "logs", "operations/state.json",
         "writeback/settings.json", "writeback/templates.json"]
 

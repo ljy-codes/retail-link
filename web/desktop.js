@@ -65,7 +65,7 @@
     const value = input.value.trim();
     if (control.kind === 'directory') return { initialPath: value };
     if (control.kind === 'export') return {
-      initialPath: document.getElementById('export-target-dir')?.value.trim() || '',
+      initialPath: input.ownerDocument.getElementById('export-target-dir')?.value.trim() || '',
       filename: value || '零售通看盘.xlsx',
     };
     const parts = splitPath(value);
@@ -109,7 +109,7 @@
         if (result.cancelled || !result.path || !input.isConnected) return;
         if (control.kind === 'export') {
           const path = splitPath(result.path);
-          const directory = document.getElementById('export-target-dir');
+          const directory = input.ownerDocument.getElementById('export-target-dir');
           if (!path.directory || !path.filename || !directory) throw new Error('未获得完整的保存位置，请重新选择。');
           fill(directory, path.directory);
           fill(input, path.filename);
@@ -129,19 +129,27 @@
 
   function installControls() {
     for (const control of controls) {
-      const input = document.getElementById(control.id);
-      if (input instanceof HTMLInputElement) installControl(input, control);
+      const input = window.RetailLinkWorkspace?.querySelector('#'+control.id) || document.getElementById(control.id);
+      if (input?.tagName === 'INPUT') installControl(input, control);
     }
   }
 
   function mount() {
     installControls();
-    const observer = new MutationObserver(records => {
-      if (records.some(record => record.addedNodes.length)) installControls();
-    });
-    observer.observe(document.body, { childList: true, subtree: true });
+    const observers = new Map();
+    const observe = doc => {
+      if(observers.has(doc))return;
+      const observer = new MutationObserver(records => {
+        if (records.some(record => record.addedNodes.length)) installControls();
+      });
+      observer.observe(doc.body, { childList: true, subtree: true });
+      observers.set(doc, observer); installControls();
+      if(doc!==document)doc.defaultView.addEventListener('pagehide',()=>{observer.disconnect();observers.delete(doc);},{once:true});
+    };
+    observe(document);window.RetailLinkWorkspace?.onDocument(observe);
     window.addEventListener('pagehide', () => {
-      observer.disconnect();
+      for(const observer of observers.values())observer.disconnect();
+      observers.clear();
       for (const operation of pending.values()) operation.reject(new Error('页面已关闭，请重新打开文件选择。'));
       pending.clear();
     }, { once: true });

@@ -2,9 +2,9 @@
 (() => {
   'use strict';
   const STORAGE_KEY = 'operator-console-appearance-v1';
-  const DEFAULTS = Object.freeze({mode: 'system', palette: 'focus', fontSize: 'standard', glass: false});
+  const DEFAULTS = Object.freeze({mode: 'dark', palette: 'focus', fontSize: 'standard', glass: false});
   const PALETTES = Object.freeze([
-    {id: 'focus', name: '定位蓝灰 · 青绿', description: '默认清爽专业', a: '#E3E7F0', b: '#2A214D', accent: '#229C9D'},
+    {id: 'focus', name: '通路青绿', description: 'A02 品牌 · 默认数据工作台', a: '#0B4F4A', b: '#DEFFF2', accent: '#0B6A62', darkAccent: '#76DAC0'},
     {id: 'violet', name: '经典紫', description: '清晰、简洁', a: '#A99AFF', b: '#7054DE', accent: '#6544C7'},
   ].map(Object.freeze));
   const MODES = Object.freeze({light: '浅色', dark: '深色', system: '跟随系统'});
@@ -45,8 +45,8 @@
 
   function tokens(mode, colors) {
     const dark = mode === 'dark';
-    const paper = dark ? '#1c2433' : '#ffffff';
-    let accent = dark ? mix(colors.b, '#ffffff', 0.45) : colors.accent;
+    const paper = dark ? '#151f2c' : '#ffffff';
+    let accent = dark ? (colors.darkAccent || mix(colors.b, '#ffffff', 0.45)) : colors.accent;
     // Accent text must remain legible on its lightly tinted selected surface.
     for (let attempt = 0; attempt < 20; attempt++) {
       const soft = mix(paper, accent, dark ? 0.15 : 0.085);
@@ -54,18 +54,18 @@
       accent = mix(accent, dark ? '#ffffff' : '#111827', 0.07);
     }
     const onAccent = contrast(accent, '#ffffff') >= contrast(accent, '#111827') ? '#ffffff' : '#111827';
-    const canvas = mix(dark ? '#121722' : '#f5f6fa', colors.a, dark ? 0.025 : 0.09);
+    const canvas = dark ? '#0d141e' : mix('#f5f6fa', colors.a, 0.035);
     return {
       '--canvas': canvas,
       '--canvas-gradient': `linear-gradient(135deg, ${alpha(colors.a, dark ? 0.035 : 0.11)} 0%, transparent 46%, ${alpha(colors.b, dark ? 0.045 : 0.065)} 100%)`,
       '--paper': paper,
-      '--surface-subtle': dark ? '#202a3a' : mix('#f5f6fa', colors.a, 0.045),
-      '--surface-raised': dark ? '#283347' : '#ffffff',
-      '--ink': dark ? '#edf0f7' : '#252b3d',
-      '--text-secondary': dark ? '#c0c9db' : '#515c70',
-      '--muted': dark ? '#a2aec5' : '#5e6a7e',
-      '--line': dark ? '#364257' : '#e0e5ee',
-      '--line-strong': dark ? '#52617a' : '#b9c3d3',
+      '--surface-subtle': dark ? '#1b2838' : mix('#f5f6fa', colors.a, 0.025),
+      '--surface-raised': dark ? '#121c29' : '#ffffff',
+      '--ink': dark ? '#edf3fb' : '#252b3d',
+      '--text-secondary': dark ? '#b4c0d0' : '#515c70',
+      '--muted': dark ? '#94a3b8' : '#5e6a7e',
+      '--line': dark ? '#283649' : '#e0e5ee',
+      '--line-strong': dark ? '#45566b' : '#b9c3d3',
       '--purple': accent,
       '--purple-dark': dark ? mix(accent, '#ffffff', 0.1) : mix(accent, '#111827', 0.13),
       '--purple-soft': mix(paper, accent, dark ? 0.15 : 0.085),
@@ -76,10 +76,10 @@
       '--amber-soft': dark ? '#42351e' : '#fff3db',
       '--red': dark ? '#ff9aab' : '#b2364b',
       '--red-soft': dark ? '#472b36' : '#fdecef',
-      '--nav': mix(dark ? '#101522' : '#fcfdff', colors.a, dark ? 0.025 : 0.065),
-      '--nav-text': dark ? '#c0c9db' : '#515c70',
-      '--nav-muted': dark ? '#a2aec5' : '#657187',
-      '--nav-strong': dark ? '#edf0f7' : '#252b3d',
+      '--nav': dark ? '#0f1823' : mix('#fcfdff', colors.a, 0.025),
+      '--nav-text': dark ? '#b4c0d0' : '#515c70',
+      '--nav-muted': dark ? '#94a3b8' : '#657187',
+      '--nav-strong': dark ? '#edf3fb' : '#252b3d',
       '--nav-active': mix(paper, accent, dark ? 0.15 : 0.085),
       '--nav-active-text': accent,
       '--shadow': dark ? '0 8px 30px rgba(0, 0, 0, 0.17)' : '0 8px 30px rgba(32, 38, 67, 0.045)',

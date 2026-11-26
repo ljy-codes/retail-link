@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -11,7 +10,6 @@ import site
 import struct
 import subprocess
 import sys
-import tempfile
 import time
 import urllib.request
 import zipfile
@@ -22,7 +20,10 @@ DESKTOP = WINDOWS.parent
 DEV = DESKTOP.parent
 ROOT = DEV
 BUILD = DESKTOP / "build" / "windows"
-RELEASE = json.loads((DESKTOP / "release.json").read_text(encoding="utf-8"))
+sys.path.insert(0, str(DESKTOP))
+import shared_payload as shared
+
+RELEASE = json.loads(shared.read_bytes(DESKTOP / "release.json"))
 PYTHON_URL = "https://www.python.org/ftp/python/3.12.10/python-3.12.10-embed-amd64.zip"
 UTF8_BOM = b"\xef\xbb\xbf"
 
@@ -84,7 +85,7 @@ def ensure_powershell_utf8_bom(data):
 
 
 def powershell_script_bytes(source):
-    return ensure_powershell_utf8_bom(Path(source).read_bytes())
+    return ensure_powershell_utf8_bom(shared.read_bytes(source))
 
 
 def _version(value, field):
@@ -103,16 +104,7 @@ def run(*args, cwd=ROOT, env=None):
 
 
 def copy_tree(source, destination):
-    shutil.copytree(
-        source,
-        destination,
-        dirs_exist_ok=True,
-        ignore=shutil.ignore_patterns(
-            "__pycache__", "*.pyc", "*.pyo", ".DS_Store", "Thumbs.db",
-            "*.xlsx", "*.xlsm", "*.xls", "*.sqlite3", "*.db", "*.jsonl",
-            "*.csv", "*.log", "*.tmp", "*.part",
-        ),
-    )
+    shared.copy_tree(source, destination)
 
 
 def find_dotnet():
@@ -142,16 +134,25 @@ def find_site_packages(explicit=None):
 
 
 def download_runtime(destination, source=None):
+    shared.check_destination(destination)
     destination.parent.mkdir(parents=True, exist_ok=True)
     if source:
-        shutil.copy2(source, destination)
+        shared.copy_file(source, destination)
         return destination
-    if destination.is_file() and destination.stat().st_size > 1_000_000:
-        return destination
+    if destination.is_file():
+        shared.checked_file(destination)
+        if destination.stat().st_size > 1_000_000:
+            return destination
     request = urllib.request.Request(PYTHON_URL, headers={"User-Agent": "RetailLink-Windows-Build/1.0"})
     print(f"下载 {PYTHON_URL}", flush=True)
     with urllib.request.urlopen(request, timeout=120) as response, destination.open("wb") as stream:
-        shutil.copyfileobj(response, stream)
+        if response.headers.get("Content-Length"):
+            shared.check_size(int(response.headers["Content-Length"]), PYTHON_URL)
+        count = 0
+        while chunk := response.read(1024 * 1024):
+            count += len(chunk)
+            shared.check_size(count, PYTHON_URL)
+            stream.write(chunk)
     if destination.stat().st_size < 1_000_000:
         destination.unlink(missing_ok=True)
         raise RuntimeError("Python embeddable 下载不完整。")
@@ -159,8 +160,7 @@ def download_runtime(destination, source=None):
 
 
 def prepare_runtime(runtime_zip, site_packages, destination):
-    with zipfile.ZipFile(runtime_zip) as archive:
-        archive.extractall(destination)
+    shared.extract_runtime_zip(runtime_zip, destination)
     pth = destination / "python312._pth"
     if not pth.is_file():
         raise RuntimeError("Python embeddable 缺少 python312._pth。")
@@ -194,8 +194,10 @@ def prepare_runtime(runtime_zip, site_packages, destination):
 
 
 def build_app(dotnet, version, destination):
+    shared.check_destination(destination)
+    shared.tree_files(WINDOWS / "app")
     if destination.exists():
-        shutil.rmtree(destination)
+        shared.remove_build_tree(destination, BUILD)
     destination.mkdir(parents=True)
     run(
         dotnet, "publish", WINDOWS / "app" / "RetailLink.Windows.csproj",
@@ -210,6 +212,7 @@ def build_app(dotnet, version, destination):
     executable = destination / "零售通.exe"
     if not executable.is_file():
         raise RuntimeError("应用发布未生成 零售通.exe。")
+    shared.tree_files(destination)
     for path in destination.iterdir():
         if path.name not in {"零售通.exe"}:
             if path.is_dir():
@@ -220,39 +223,32 @@ def build_app(dotnet, version, destination):
 
 def build_payload(version, app_publish, runtime_zip, site_packages):
     payload = BUILD / "payload"
+    shared.check_destination(payload)
     if payload.exists():
-        shutil.rmtree(payload)
+        shared.remove_build_tree(payload, BUILD)
     payload.mkdir(parents=True)
-    shutil.copy2(app_publish / "零售通.exe", payload / "零售通.exe")
+    shared.copy_file(app_publish / "零售通.exe", payload / "零售通.exe", root=app_publish)
     app = payload / "app"
-    app.mkdir()
-    shutil.copy2(DEV / "server.py", app / "server.py")
-    for name in ("backend", "web"):
-        copy_tree(DEV / name, app / name)
-    shutil.copy2(WINDOWS / "使用说明.html", app / "使用说明.html")
+    shared.copy_shared_payload(DEV, app, RELEASE["features"])
+    shared.copy_file(WINDOWS / "使用说明.html", app / "使用说明.html", root=WINDOWS)
     metadata = windows_metadata(RELEASE)
     metadata["architecture"] = "x64"
     (app / "版本.json").write_text(
         json.dumps(metadata, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    (app / "功能清单.json").write_text(
-        json.dumps(RELEASE["features"], ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     prepare_runtime(runtime_zip, site_packages, payload / "runtime")
     uninstaller_source = WINDOWS / "uninstall" / "uninstall.ps1"
     uninstaller_target = payload / "uninstall.ps1"
     uninstaller_target.write_bytes(powershell_script_bytes(uninstaller_source))
     shutil.copystat(uninstaller_source, uninstaller_target)
-    for path in payload.rglob("*"):
-        if path.is_file():
-            relative = path.relative_to(payload)
-            if forbidden_payload_path(relative):
-                raise RuntimeError(f"载荷包含禁止文件：{relative.as_posix()}")
+    shared.validate_payload(payload)
     return payload
 
 
 def smoke_backend(payload):
     smoke = BUILD / "smoke"
+    shared.check_destination(smoke)
     if smoke.exists():
-        shutil.rmtree(smoke)
+        shared.remove_build_tree(smoke, BUILD)
     data = smoke / "data"
     original = smoke / "original"
     export = smoke / "export"
@@ -281,7 +277,7 @@ def smoke_backend(payload):
                 output = process.stdout.read().decode("utf-8", "replace") if process.stdout else ""
                 raise RuntimeError(f"打包后端提前退出：\n{output}")
             if ready.is_file():
-                payload_data = json.loads(ready.read_text(encoding="utf-8"))
+                payload_data = json.loads(shared.read_bytes(ready, smoke))
                 if payload_data.get("pid") != process.pid:
                     raise RuntimeError("打包后端 PID 校验失败。")
                 if payload_data.get("version") != windows_metadata(RELEASE)["version"]:
@@ -333,22 +329,33 @@ def smoke_backend(payload):
 
 
 def zip_payload(payload, destination):
+    files = shared.validate_payload(payload)
+    # ZIP_STORED upper bound plus headers: refuse before touching an old archive.
+    shared.check_size(sum(p.stat().st_size + 1024 for p in files) + 1024, destination)
+    shared.check_destination(destination)
+    if destination.exists():
+        shared.checked_file(destination)
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.unlink(missing_ok=True)
-    files = sorted(path for path in payload.rglob("*") if path.is_file())
     with zipfile.ZipFile(destination, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
         for path in files:
             relative = path.relative_to(payload).as_posix()
             info = zipfile.ZipInfo(relative, date_time=(2026, 1, 1, 0, 0, 0))
             info.compress_type = zipfile.ZIP_DEFLATED
             info.external_attr = 0o100644 << 16
-            archive.writestr(info, path.read_bytes(), compresslevel=9)
+            archive.writestr(info, shared.read_bytes(path, payload), compresslevel=9)
+    shared.checked_file(destination)
     return destination
 
 
 def build_installer(dotnet, version, payload_zip, destination):
+    shared.check_destination(destination)
+    shared.checked_file(payload_zip)
+    with zipfile.ZipFile(payload_zip) as archive:
+        shared.archive_members(archive)
+    shared.tree_files(WINDOWS / "installer")
     if destination.exists():
-        shutil.rmtree(destination)
+        shared.remove_build_tree(destination, BUILD)
     destination.mkdir(parents=True)
     run(
         dotnet, "publish", WINDOWS / "installer" / "RetailLink.Setup.csproj",
@@ -365,6 +372,7 @@ def build_installer(dotnet, version, payload_zip, destination):
     source = destination / "RetailLink.Setup.exe"
     if not source.is_file():
         raise RuntimeError("安装程序发布失败。")
+    shared.tree_files(destination)
     final = destination / f"零售通-v{version}-windows-x64-setup.exe"
     source.replace(final)
     for path in destination.iterdir():
@@ -378,30 +386,24 @@ def build_installer(dotnet, version, payload_zip, destination):
 
 def publish(delivery, installer):
     staging = BUILD / "delivery"
+    shared.check_destination(staging)
     if staging.exists():
-        shutil.rmtree(staging)
+        shared.remove_build_tree(staging, BUILD)
     staging.mkdir(parents=True)
     version = windows_metadata(RELEASE)["version"]
-    shutil.copy2(installer, staging / installer.name)
-    shutil.copy2(WINDOWS / "使用说明.html", staging / f"零售通-v{version}-使用说明.html")
+    shared.copy_file(installer, staging / installer.name)
+    shared.copy_file(WINDOWS / "使用说明.html", staging / f"零售通-v{version}-使用说明.html")
     if len(list(staging.iterdir())) != 2:
         raise RuntimeError("Windows 交付目录必须仅有安装包和使用说明。")
-    delivery = delivery.resolve()
-    allowed = {ROOT.resolve(), (ROOT / "产品交付").resolve()}
-    if delivery not in allowed:
-        raise RuntimeError("交付目录必须是仓库根目录或 产品交付。")
-    destination = delivery if delivery.name == "产品交付" else delivery / "产品交付"
-    if destination.exists():
-        shutil.rmtree(destination)
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copytree(staging, destination)
+    destination = shared.publish_delivery(staging, delivery, "Windows")
     for path in sorted(destination.iterdir()):
-        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        digest = shared.file_digest(path)
         print(f"{path.name}\t{path.stat().st_size}\t{digest}")
     return destination
 
 
 def write_icon(path):
+    shared.check_destination(path)
     size = 256
     pixels = bytearray([0, 0, 0, 0] * size * size)
 
@@ -464,9 +466,7 @@ def write_icon(path):
 
 
 def clean_build():
-    build_root = DESKTOP / "build"
-    if build_root.exists():
-        shutil.rmtree(build_root)
+    shared.remove_build_tree(BUILD, DESKTOP / "build" / "windows")
 
 
 def main():
@@ -476,7 +476,7 @@ def main():
     parser.add_argument("--python-packages", type=Path)
     parser.add_argument("--dotnet", default=None)
     parser.add_argument("--publish", action="store_true")
-    parser.add_argument("--delivery-dir", type=Path, default=ROOT / "产品交付")
+    parser.add_argument("--delivery-dir", type=Path, default=shared.default_delivery_dir(ROOT, "Windows"))
     parser.add_argument("--keep-build", action="store_true")
     parser.add_argument("--write-icon-only", action="store_true")
     args = parser.parse_args()
@@ -484,6 +484,7 @@ def main():
     if args.write_icon_only:
         return
 
+    shared.check_destination(BUILD)
     BUILD.mkdir(parents=True, exist_ok=True)
     dotnet = find_dotnet() if not args.dotnet else args.dotnet
     site_packages = find_site_packages(args.python_packages)

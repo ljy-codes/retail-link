@@ -15,7 +15,7 @@ from tests.temp_support import temporary_directory
 
 PROJECT = Path(__file__).resolve().parents[1]
 TEST_ROOT = Path(__file__).resolve().parent
-DEV = PROJECT / "开发空间"
+DEV = PROJECT
 sys.path.insert(0, str(DEV))
 
 
@@ -181,7 +181,10 @@ class H:
  def send_json(self,value,status=200): print(json.dumps({'status':status,'value':value},ensure_ascii=False,allow_nan=False))
 handle_daily_request(handler=H(),method='GET',path='/api/daily',query={},body=None,data_dir=Path(sys.argv[2]),lookup=lambda key:None)
 """
-        completed = subprocess.run([sys.executable, "-c", program, str(DEV), str(self.data)], capture_output=True, text=True, check=True)
+        completed = subprocess.run(
+            [sys.executable, "-X", "utf8", "-c", program, str(DEV), str(self.data)],
+            capture_output=True, text=True, encoding="utf-8", check=True,
+        )
         response = json.loads(completed.stdout.strip().splitlines()[-1])
         self.assertEqual(response["status"], 200)
         self.assertEqual(response["value"]["items"][0]["id"], item["id"])

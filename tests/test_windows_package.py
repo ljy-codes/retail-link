@@ -411,7 +411,9 @@ static class Harness
         self.assertTrue(manual.is_file())
         html = manual.read_text(encoding="utf-8")
         self.assertIn("Windows 试用版", html)
-        self.assertIn(self.release["windowsVersion"], html)
+        # A new Mac release may reserve the next Windows version without
+        # rewriting that platform's previously built manual.
+        self.assertIn(self.release.get("lastBuiltWindowsVersion", self.release["windowsVersion"]), html)
         self.assertNotIn("MAC 试用版", html)
         source = (WINDOWS / "build_windows.py").read_text(encoding="utf-8")
         self.assertIn('WINDOWS / "使用说明.html"', source)

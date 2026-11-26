@@ -63,6 +63,9 @@ function Test-ProtectedPath {
 }
 
 function Get-RegisteredInstallDirectory {
+    if (-not [string]::IsNullOrWhiteSpace($InstallDir)) {
+        return [IO.Path]::GetFullPath([Environment]::ExpandEnvironmentVariables($InstallDir))
+    }
     $registered = $null
     try {
         $key = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($registryUninstallPath, $false)
@@ -78,9 +81,6 @@ function Get-RegisteredInstallDirectory {
     }
     if (-not [string]::IsNullOrWhiteSpace([string]$registered)) {
         return [IO.Path]::GetFullPath([Environment]::ExpandEnvironmentVariables([string]$registered))
-    }
-    if (-not [string]::IsNullOrWhiteSpace($InstallDir)) {
-        return [IO.Path]::GetFullPath([Environment]::ExpandEnvironmentVariables($InstallDir))
     }
     return $null
 }
@@ -438,6 +438,10 @@ if ($script:selectedMode -eq 'Complete' -and (Test-Path -LiteralPath $applicatio
         'history',
         'history_deleted',
         'import_sessions',
+        'daily.sqlite3',
+        'daily.sqlite3-wal',
+        'daily.sqlite3-shm',
+        'import_templates.json',
         'operation.sqlite3',
         'operation.sqlite3-wal',
         'operation.sqlite3-shm',

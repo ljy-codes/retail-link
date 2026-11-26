@@ -25,7 +25,7 @@ from tests.temp_support import temporary_directory
 ROOT = Path(__file__).resolve().parents[1]
 DEV = ROOT
 TEST_DIR = Path(__file__).resolve().parent
-APP = DEV / "desktop/build/零售通.app"
+APP = DEV / "desktop/build/macos/零售通.app"
 
 
 def digest(path):
@@ -124,6 +124,8 @@ print(json.dumps({'prefix':sys.prefix,'basePrefix':sys.base_prefix,'executable':
         self.assertTrue(os.access(self.python, os.X_OK))
 
     def test_packaged_server_backend_and_web_match_development_sources(self):
+        from desktop.shared_payload import verify_shared_payload
+        verify_shared_payload(self.application)
         self.assertEqual(digest(self.application / "server.py"), digest(DEV / "server.py"))
         for name in ("backend", "web"):
             expected = {p.relative_to(DEV / name).as_posix(): digest(p)
@@ -134,7 +136,8 @@ print(json.dumps({'prefix':sys.prefix,'basePrefix':sys.base_prefix,'executable':
 
     def test_bundle_contains_only_application_runtime_and_no_user_or_test_data(self):
         self.assertEqual({p.name for p in self.application.iterdir()},
-                         {"server.py", "backend", "web", "版本.json", "功能清单.json"})
+                          {"server.py", "backend", "web", "版本.json", "功能清单.json",
+                           "shared-source-manifest.json"})
         forbidden = {"原始资料", "本地数据", "生成文件", "测试空间", "测试数据", "导入记录", "history",
                      "history_deleted", "import_sessions", "__pycache__", ".pytest_cache", ".git", "node_modules"}
         unwanted_suffixes = {".pyc", ".pyo", ".xlsx", ".xlsm", ".xls", ".sqlite3", ".db", ".jsonl", ".csv", ".dmg"}

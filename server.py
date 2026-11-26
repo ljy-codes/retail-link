@@ -125,6 +125,11 @@ def resource_directory():
         bundle = next((parent for parent in (APP_DIR, *APP_DIR.parents) if parent.suffix.lower() == ".app"), None)
         if bundle is not None:
             return bundle.resolve()
+        # The Windows payload has app/ beside its executable and runtime/.
+        # Protect the whole install, just as macOS protects the whole bundle:
+        # upgrades replace that directory, including any misplaced exports.
+        if APP_DIR.name.lower() == "app" and (APP_DIR.parent / "零售通.exe").is_file():
+            return APP_DIR.parent.resolve()
     return APP_DIR.resolve()
 
 

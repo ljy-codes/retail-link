@@ -58,7 +58,7 @@ class WindowsPackageTests(unittest.TestCase):
         checked = self.build.validate_release(self.release)
         self.assertEqual(checked["featureLevel"], "desktop-4")
         metadata = self.build.windows_metadata(self.release)
-        self.assertEqual(metadata["version"], "0.2.6")
+        self.assertEqual(metadata["version"], self.release["windowsVersion"])
         self.assertEqual(metadata["featureLevel"], "desktop-4")
         self.assertEqual(metadata["pairedMacVersion"], "0.2.1")
 

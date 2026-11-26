@@ -1,8 +1,10 @@
 # 零售通桌面版开发
 
+> 本轮本地候选为 Windows 0.2.8，尚未安装或发布；Mac 0.2.1 仅作配对参考。本轮功能对照见 [跨平台功能对照](../docs/跨平台功能对照.md)，执行证据见 [test.md](../docs/test.md)。以下 0.2.6 交付与 Mac 实机记录均为历史记录。
+
 > 2026-11-26 发布更新：Windows v0.2.6 已增加安装前目录身份、占用和可替换性守卫，未知非空目录不再被搬移、覆盖或删除；完成技术构建、错误目录零修改拦截、自定义中文空格路径安装／启动／升级／卸载闭环后发布 x64 安装包。客户此前的安装卸载体验反馈仍为未关闭的人工验收项，完整业务功能尚未验收。Mac v0.2.1 已验收源码仍锚定 v0.2.1-macos（fbb54cf）。
 
-当前交付 Mac 0.2.1／Windows 0.2.6，功能基线 desktop-4。Mac 奇数、Windows 为大于配对 Mac 补丁号的偶数。版本号与功能清单是源码目标，不代表所有平台均已通过客户验收。
+历史已发布版本为Mac0.2.1／Windows0.2.6，本轮本地交付候选为Windows0.2.8，功能基线desktop-4。Mac奇数、Windows为大于配对Mac补丁号的偶数。版本号与功能清单是源码目标，不代表所有平台均已通过客户验收。
 
 macOS 使用 AppKit／WKWebView 原生壳，内置 Python 仅监听系统分配的 127.0.0.1 端口。共享 server/backend/web 只维护一套业务算法。Windows 复用同一清单、同一虚构样本和 desktop-4 协议，宿主使用 WinForms／WebView2；v0.2.6 已完成安装前目录守卫和 Windows 技术验收，安装位置、启动与快捷方式选项、卸载方式和结果反馈均可实际操作。
 
@@ -14,7 +16,9 @@ macOS 使用 AppKit／WKWebView 原生壳，内置 Python 仅监听系统分配�
 python3 -B desktop/build_macos.py --python-runtime /path/to/portable-python --publish
 ```
 
-编译包含 macos/Main.swift 和 macos/LifecycleSupport.swift。图标由构建脚本绘制客户指定的红色主底、白色经营折线图与数据点，生成 PNG、ICNS、ICO。产品交付仍仅最新 DMG 与对应 HTML 两文件。构建缓存、App 与中间图标位于 desktop/build，不进源码交付。
+编译包含 macos/Main.swift 和 macos/LifecycleSupport.swift。图标由构建脚本绘制客户指定的红色主底、白色经营折线图与数据点，生成 PNG、ICNS、ICO。产品交付仍仅最新 DMG 与对应 HTML 两文件。构建缓存按平台放在 `desktop/build/macos/`、`desktop/build/windows/`，互不清理；两平台共享业务载荷由 `shared_payload.py` 生成，包含逐文件大小和 SHA-256 清单。
+
+当前工作区的默认交付位置为 `E:\零售通\产品交付\macOS` 和 `E:\零售通\产品交付\Windows`，也可通过 `--delivery-dir` 指定。构建不会安装应用；目标目录出现未知文件时停止替换，保留现场。单文件或 ZIP 成员超过 300 MiB 时拒绝读取、复制和打包。
 
 ## 安装、升级与卸载契约
 
@@ -39,7 +43,7 @@ window.webkit.messageHandlers.retailLinkDesktop.postMessage({action: 'frontendRe
 RETAIL_LINK_TEST_ROOT 必须指向测试空间或临时目录，隔离支持目录、导出、日志和临时目录，禁用持久 WebKit 数据。带此环境并传 --lifecycle-preview 可只打开生命周期预览、不启动业务后端。虚构目录测试：
 
 ```sh
-PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest discover -s 测试空间 -p test_v02_desktop.py -v
+PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest discover -s tests -p test_v02_desktop.py -v
 ```
 
 从仓库运行时按实际测试目录调整路径。现成 App 专项测试前先从 DMG 恢复或重建 App；不在签名包中写 pycache。

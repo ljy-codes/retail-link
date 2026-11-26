@@ -20,6 +20,8 @@ internal sealed class MainForm : Form
     private NativeBridge? _bridge;
     private TaskCompletionSource<bool>? _navigationCompleted;
     private TaskCompletionSource<bool>? _frontendReady;
+    private CancellationTokenSource? _startupCancellation;
+    private Exception? _webViewFailure;
     private string _startupRunId = "";
     private bool _startupRunning;
     private bool _closing;
@@ -136,6 +138,7 @@ internal sealed class MainForm : Form
             return;
         }
         _startupRunning = true;
+        _webViewFailure = null;
         _retry.Enabled = false;
         _quit.Visible = false;
         _startupWatch.Restart();
@@ -146,6 +149,7 @@ internal sealed class MainForm : Form
         RecordStartupStage("开始启动", $"版本 {_version}");
         ShowStage("运行环境", "正在准备 WebView2 和内置运行环境。", "running");
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(45));
+        _startupCancellation = timeout;
         try
         {
             var webViewTask = InitializeWebViewAsync();
@@ -170,13 +174,14 @@ internal sealed class MainForm : Form
         }
         catch (WebView2RuntimeNotFoundException)
         {
+            await _backend.StopAsync();
             RecordStartupStage("失败", "缺少 Microsoft Edge WebView2 Runtime");
             ShowLoading(
                 "缺少 Microsoft Edge WebView2 运行环境",
                 "请安装 Microsoft Edge WebView2 Runtime 后，点击“重新启动”。Windows 10/11 通常已随 Edge 提供。也可点击菜单“应用 → 显示启动诊断”查看日志。",
                 failed: true);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (_webViewFailure is null)
         {
             await _backend.StopAsync();
             RecordStartupStage("启动超时", "45 秒内没有收到页面 frontendReady");
@@ -188,11 +193,13 @@ internal sealed class MainForm : Form
         catch (Exception error)
         {
             await _backend.StopAsync();
+            error = _webViewFailure ?? error;
             RecordStartupStage("失败", error.ToString());
             ShowLoading("本地工作空间尚未就绪", error.Message, failed: true);
         }
         finally
         {
+            _startupCancellation = null;
             _retry.Enabled = true;
             _startupRunning = false;
         }
@@ -223,6 +230,7 @@ internal sealed class MainForm : Form
         core.NavigationStarting += OnNavigationStarting;
         core.NavigationCompleted += OnNavigationCompleted;
         core.DownloadStarting += OnDownloadStarting;
+        core.ProcessFailed += OnWebViewProcessFailed;
         _bridge = new NativeBridge(_webView, this, () => _backend.BackendUri?.Port);
         _bridge.FrontendReady += () =>
         {
@@ -238,6 +246,37 @@ internal sealed class MainForm : Form
             };
             window.__RETAIL_LINK_DESKTOP__ = Object.freeze({platform:'windows',version:{{JsonSerializer.Serialize(_version)}}});
             """);
+    }
+
+    private async void OnWebViewProcessFailed(object? sender, CoreWebView2ProcessFailedEventArgs args)
+    {
+        if (_closing || _webViewFailure is not null
+            || args.ProcessFailedKind != CoreWebView2ProcessFailedKind.RenderProcessExited)
+        {
+            return;
+        }
+        var error = new InvalidOperationException("页面渲染进程已停止，请点击“重新启动”。");
+        _webViewFailure = error;
+        if (_startupCancellation is not null)
+        {
+            // Let the existing startup failure path reclaim the child exactly once.
+            _startupCancellation.Cancel();
+            return;
+        }
+        _retry.Enabled = false;
+        try
+        {
+            await _backend.StopAsync();
+            if (!_closing)
+            {
+                RecordStartupStage("失败", error.ToString());
+                ShowLoading("本地工作空间尚未就绪", error.Message, failed: true);
+            }
+        }
+        finally
+        {
+            _retry.Enabled = true;
+        }
     }
 
     private void OnNavigationStarting(object? sender, CoreWebView2NavigationStartingEventArgs args)
@@ -529,7 +568,7 @@ internal sealed class MainForm : Form
             {
                 UseShellExecute = true,
                 WindowStyle = ProcessWindowStyle.Hidden,
-                Arguments = $"-NoProfile -ExecutionPolicy Bypass -File \"{script}\"",
+                Arguments = $"-NoProfile -ExecutionPolicy Bypass -File \"{script}\" -InstallDir \"{Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory)}\"",
             };
             Process.Start(start);
         }

@@ -32,7 +32,7 @@ Mac本机313项Python整包、23项单品、18项日记录、16项外观检查�
 
 ## 源码与平台
 
-长期仅main、macos、windows三分支；共享业务只维护一份，Mac带头验证，Windows在对应环境完成系统实现和打包。Mac补丁号为奇数，Windows为大于配对Mac补丁号的偶数，规则见[分支与版本规定](docs/GitHub分支与版本规定.md)。
+长期仅main、macos、windows三分支；**macOS与Windows功能及Logo / 图标必须一致，实现方式由各自系统决定。** 任一平台均可先开发并为另一端预留版本号；共享业务以main为准，由各平台自行完成系统实现、同步、验证和打包。**Windows不得修改macos分支或代写macOS实现，macOS不得修改windows分支或代写Windows实现；只有用户明确授权本次跨端修改时才允许例外。** 版本预留不等于实现或验收完成。Mac补丁号为奇数，Windows为大于配对Mac补丁号的偶数，详见[分支与版本规定](docs/GitHub分支与版本规定.md)及[开发执行规则](AGENTS.md)。
 
 Mac0.2.1已验收构建源码使用v0.2.1-macos标签；Windows v0.2.6技术发布使用v0.2.6-windows标签和对应GitHub Release，仅上传Windows安装包与配套HTML两文件。已发布的v0.2.4-windows保留追溯，不覆盖或复用。客户产品交付继续只保留最新安装包和匹配HTML。
 

@@ -95,6 +95,7 @@
     }
     document.body.style.overflow = '';
     if (entry.popup && !entry.popup.closed) entry.popup.focus();
+    const wasOpened = entry.opened;
     if (!entry.opened && !entry.opening) {
       entry.opening = true;
       try {
@@ -104,6 +105,7 @@
       } catch (error) { showMessage(error.message); }
       finally { entry.opening = false; }
     }
+    if (wasOpened) entry.onActivate?.();
     syncNavigation();
     document.dispatchEvent(new CustomEvent('retail-workspace-change', {detail: {key}}));
     return true;
@@ -166,11 +168,17 @@
     if (active === key) entry.root.querySelector('input,button,select')?.focus({preventScroll: true});
   }
   function restoreAll() { for (const key of entries.keys()) restore(key); }
+  function invalidate(key) {
+    const entry = entries.get(key); if (!entry) return;
+    if (entry.popup) restore(key);
+    entry.root.replaceChildren(); entry.opened = false;
+    if (active === key) activate('dashboard');
+  }
   window.addEventListener('operator-appearance-change', () => {
     for (const doc of documents().slice(1)) copyTheme(doc);
   });
   window.addEventListener('pagehide', restoreAll);
-  window.RetailLinkWorkspace = Object.freeze({register, refresh, activate, present, detach, restore, restoreAll,
+  window.RetailLinkWorkspace = Object.freeze({register, refresh, activate, present, detach, restore, restoreAll, invalidate,
     onDocument, documents, querySelector, querySelectorAll, get activeKey() {return active;},
     get activeDocument() {return lastDocument;}, has(key) {return entries.has(key);}});
 })();

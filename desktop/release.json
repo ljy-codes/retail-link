@@ -42,5 +42,7 @@
     "detachable_workspace_views",
     "workbench_charts"
   ],
-  "pairedMacVersion": "0.2.9"
+  "pairedMacVersion": "0.2.9",
+  "lastBuiltWindowsVersion": "0.2.8",
+  "windowsStatus": "reserved-awaiting-windows-adaptation"
 }

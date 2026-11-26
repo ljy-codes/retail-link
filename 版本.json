@@ -3,10 +3,11 @@
   "version": "0.2.9",
   "featureLevel": "desktop-4",
   "pairedWindowsVersion": "0.2.10",
-  "buildStatus": "macos-workbench-awaiting-native-verification",
+  "buildStatus": "macos-installed-workbench-verified",
   "releaseDate": "2026-11-26",
   "lastVerifiedMacTag": "v0.2.1-macos",
   "lastVerifiedWindowsTag": "v0.2.6-windows",
-  "candidatePurpose": "Mac0.2.9工作台修复；Windows0.2.10为待对应平台适配与验收的预留目标",
+  "candidatePurpose": "Mac0.2.9已本机升级及工作台验证；Windows0.2.10为待对应平台适配与验收的预留目标；真实业务仍待验收",
+  "lastVerifiedMacVersion": "0.2.9",
   "platform": "mac"
 }

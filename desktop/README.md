@@ -1,10 +1,10 @@
 # 零售通桌面版开发
 
-> 本轮本地候选为 Mac 0.2.7 / Windows 0.2.8，均未完成客户正式验收。本轮功能对照见 [跨平台功能对照](../docs/跨平台功能对照.md)，执行证据见 [test.md](../docs/test.md)。
+> 本轮Mac本机验收版为0.2.9，已完成升级和虚构数据预置；Windows0.2.10为预留目标，尚未对应平台适配。本轮功能对照见 [跨平台功能对照](../docs/跨平台功能对照.md)，执行证据见 [test.md](../docs/test.md)。
 
 > 2026-11-26 发布更新：Mac v0.2.7 已接入 A02「通路」图标源并完成候选包构建、DMG 校验和包内容验证；Windows 目录守卫和技术构建保持独立。客户安装卸载体验、性能和完整业务验收仍按平台分别记录。
 
-历史已发布版本为Mac0.2.1／Windows0.2.6，本轮本地候选为Mac0.2.7／Windows0.2.8，功能基线desktop-4。Mac奇数、Windows为大于配对Mac补丁号的偶数。版本号与功能清单是源码目标，不代表所有平台均已通过客户验收。
+历史已发布版本为Mac0.2.1／Windows0.2.6，本轮Mac本机验收版为0.2.9／Windows预留0.2.10，功能基线desktop-4。Mac奇数、Windows为大于配对Mac补丁号的偶数。版本号与功能清单是源码目标，不代表所有平台均已通过客户验收。
 
 macOS 使用 AppKit／WKWebView 原生壳，内置 Python 仅监听系统分配的 127.0.0.1 端口。共享 server/backend/web 只维护一套业务算法。Windows 复用同一清单、同一虚构样本和 desktop-4 协议，宿主使用 WinForms／WebView2；v0.2.6 已完成安装前目录守卫和 Windows 技术验收，安装位置、启动与快捷方式选项、卸载方式和结果反馈均可实际操作。
 
@@ -16,7 +16,7 @@ macOS 使用 AppKit／WKWebView 原生壳，内置 Python 仅监听系统分配�
 python3 -B desktop/build_macos.py --python-runtime /path/to/portable-python --publish
 ```
 
-编译包含 macos/Main.swift 和 macos/LifecycleSupport.swift。图标以 `docs/设计/图标概念/零售通-A02-通路.svg` 为唯一设计源，由 macOS 系统工具栅格化并生成 PNG、ICNS、ICO；不再在构建脚本中另画一套图形。产品交付仍仅最新 DMG 与对应 HTML 两文件。构建缓存按平台放在 `desktop/build/macos/`、`desktop/build/windows/`，互不清理；两平台共享业务载荷由 `shared_payload.py` 生成，包含逐文件大小和 SHA-256 清单。
+编译包含 macos/Main.swift 和 macos/LifecycleSupport.swift。图标由已确认的 A02「通路」SVG 设计源生成 PNG、ICNS、ICO。产品交付仍仅最新 DMG 与对应 HTML 两文件。构建缓存按平台放在 `desktop/build/macos/`、`desktop/build/windows/`，互不清理；两平台共享业务载荷由 `shared_payload.py` 生成，包含逐文件大小和 SHA-256 清单。
 
 Mac 本机采用 `开发空间/GitHub工作区/retail-link` 布局时，默认交付到外层项目的 `产品交付/`，该目录仅保留最新 DMG 和对应 HTML。`源码/` 布局继续交付到同级 `产品交付/<平台>/`，普通仓库继续交付到仓库内 `产品交付/<平台>/`；均可通过 `--delivery-dir` 指定。构建不会安装应用；目标目录出现未知文件时停止替换，保留现场。单文件或 ZIP 成员超过 300 MiB 时拒绝读取、复制和打包。
 

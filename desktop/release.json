@@ -1,7 +1,7 @@
 {
   "featureLevel": "desktop-4",
   "macVersion": "0.2.1",
-  "windowsVersion": "0.2.4",
+  "windowsVersion": "0.2.6",
   "minimumMacOS": "13.0",
   "features": [
     "reviewed_import",

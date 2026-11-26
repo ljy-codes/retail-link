@@ -1,6 +1,7 @@
 """Windows desktop source, bridge and release-package contracts."""
 from __future__ import annotations
 
+import html
 import importlib.util
 import json
 from pathlib import Path
@@ -57,7 +58,7 @@ class WindowsPackageTests(unittest.TestCase):
         checked = self.build.validate_release(self.release)
         self.assertEqual(checked["featureLevel"], "desktop-4")
         metadata = self.build.windows_metadata(self.release)
-        self.assertEqual(metadata["version"], "0.2.4")
+        self.assertEqual(metadata["version"], "0.2.6")
         self.assertEqual(metadata["featureLevel"], "desktop-4")
         self.assertEqual(metadata["pairedMacVersion"], "0.2.1")
 
@@ -75,6 +76,7 @@ class WindowsPackageTests(unittest.TestCase):
             "app/NativeBridge.cs",
             "installer/RetailLink.Setup.csproj",
             "installer/Program.cs",
+            "installer/InstallDirectoryGuard.cs",
             "uninstall/uninstall.ps1",
             "build_windows.py",
             "README.md",
@@ -210,6 +212,149 @@ class WindowsPackageTests(unittest.TestCase):
             "旧版",
         ):
             self.assertIn(text, installer)
+
+    def test_installer_uses_guard_before_extracting_into_existing_directory(self):
+        installer = (WINDOWS / "installer" / "Program.cs").read_text(encoding="utf-8")
+        guard = (WINDOWS / "installer" / "InstallDirectoryGuard.cs").read_text(encoding="utf-8")
+        combined = installer + guard
+        start = installer.index("EnsureApplicationStopped();")
+        extract = installer.index("ExtractPayload(payload, staging);", start)
+        guarded = installer[start:extract]
+        self.assertIn("InstallDirectoryGuard.ValidateExistingDirectory", combined)
+        self.assertIn("InstallDirectoryGuard.VerifyExistingDirectoryCanBeReplaced", guarded)
+        for text in ("安装位置不可替换", "安装前目录占用/权限检查", "其他文件"):
+            self.assertIn(text, combined)
+
+    def test_installer_guard_preserves_user_files_and_detects_locked_directories(self):
+        dotnet = shutil.which("dotnet")
+        if not dotnet:
+            self.skipTest(".NET SDK 不可用")
+        guard_source = WINDOWS / "installer" / "InstallDirectoryGuard.cs"
+        self.assertTrue(guard_source.is_file(), "缺少安装目录安全检查模块")
+        with tempfile.TemporaryDirectory() as folder:
+            project = Path(folder) / "guard-tests"
+            project.mkdir()
+            linked_source = html.escape(str(guard_source).replace("\\", "/"))
+            (project / "GuardTests.csproj").write_text(
+                "<Project Sdk=\"Microsoft.NET.Sdk\">\n"
+                "  <PropertyGroup>\n"
+                "    <OutputType>Exe</OutputType>\n"
+                "    <TargetFramework>net10.0-windows</TargetFramework>\n"
+                "    <ImplicitUsings>enable</ImplicitUsings>\n"
+                "    <Nullable>enable</Nullable>\n"
+                "  </PropertyGroup>\n"
+                "  <ItemGroup>\n"
+                f"    <Compile Include=\"{linked_source}\" Link=\"InstallDirectoryGuard.cs\" />\n"
+                "  </ItemGroup>\n"
+                "</Project>\n",
+                encoding="utf-8",
+            )
+            (project / "Program.cs").write_text(
+                """
+using RetailLink.Setup;
+
+static class Harness
+{
+    private static void ExpectFailure(Action action, params string[] expected)
+    {
+        try
+        {
+            action();
+        }
+        catch (InvalidOperationException error)
+        {
+            foreach (var text in expected)
+            {
+                if (!error.Message.Contains(text, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"错误提示缺少：{text}\\n{error.Message}", error);
+                }
+            }
+            return;
+        }
+        throw new InvalidOperationException("预期安装目录检查失败，但实际通过。");
+    }
+
+    public static int Main()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "retail-guard-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var userDirectory = Path.Combine(root, "用户 软件");
+            Directory.CreateDirectory(userDirectory);
+            var userFile = Path.Combine(userDirectory, "IntelliJ-配置.txt");
+            File.WriteAllText(userFile, "不得移动或删除");
+            ExpectFailure(
+                () => InstallDirectoryGuard.ValidateExistingDirectory(userDirectory),
+                userDirectory, "其他文件", "浏览");
+            if (!File.Exists(userFile) || File.ReadAllText(userFile) != "不得移动或删除")
+            {
+                throw new InvalidOperationException("未知用户目录被修改。");
+            }
+
+            var emptyDirectory = Path.Combine(root, "空 目录");
+            Directory.CreateDirectory(emptyDirectory);
+            InstallDirectoryGuard.ValidateExistingDirectory(emptyDirectory);
+            InstallDirectoryGuard.VerifyExistingDirectoryCanBeReplaced(emptyDirectory);
+            if (!Directory.Exists(emptyDirectory))
+            {
+                throw new InvalidOperationException("空目录替换检查后未恢复。");
+            }
+
+            var retailDirectory = Path.Combine(root, "零售通");
+            Directory.CreateDirectory(Path.Combine(retailDirectory, "app"));
+            File.WriteAllText(Path.Combine(retailDirectory, "零售通.exe"), "");
+            File.WriteAllText(Path.Combine(retailDirectory, "uninstall.ps1"), "");
+            File.WriteAllText(
+                Path.Combine(retailDirectory, "app", "版本.json"),
+                "{\\"name\\":\\"零售通\\",\\"platform\\":\\"windows\\",\\"version\\":\\"0.2.4\\"}");
+            InstallDirectoryGuard.ValidateExistingDirectory(retailDirectory);
+            InstallDirectoryGuard.VerifyExistingDirectoryCanBeReplaced(retailDirectory);
+
+            var lockedDirectory = Path.Combine(root, "被占用目录");
+            Directory.CreateDirectory(lockedDirectory);
+            var lockedFile = Path.Combine(lockedDirectory, "held.txt");
+            File.WriteAllText(lockedFile, "x");
+            using (new FileStream(lockedFile, FileMode.Open, FileAccess.Read, FileShare.Read))
+            {
+                ExpectFailure(
+                    () => InstallDirectoryGuard.VerifyExistingDirectoryCanBeReplaced(lockedDirectory),
+                    lockedDirectory, "安装位置不可替换", "占用");
+            }
+            if (!Directory.Exists(lockedDirectory))
+            {
+                throw new InvalidOperationException("锁定目录检查后原目录丢失。");
+            }
+
+            var futureChinesePath = Path.Combine(root, "新 中文 路径", "零售通");
+            InstallDirectoryGuard.ValidateExistingDirectory(futureChinesePath);
+            InstallDirectoryGuard.VerifySiblingDirectoryRename(root);
+            Console.Write("PASS");
+            return 0;
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, true);
+            }
+        }
+    }
+}
+""".lstrip(),
+                encoding="utf-8",
+            )
+            result = subprocess.run(
+                [dotnet, "run", "--project", str(project), "-c", "Release"],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=120,
+            )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("PASS", result.stdout)
 
     def test_uninstaller_resolves_registry_location_and_has_explicit_scope_ui(self):
         uninstaller = (WINDOWS / "uninstall" / "uninstall.ps1").read_text(encoding="utf-8-sig")

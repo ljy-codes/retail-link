@@ -87,6 +87,7 @@ internal static class Program
         }
 
         EnsureApplicationStopped();
+        InstallDirectoryGuard.VerifyExistingDirectoryCanBeReplaced(installDirectory);
         payload.Position = 0;
         var parent = Path.GetDirectoryName(installDirectory)
             ?? throw new InvalidOperationException("安装目录无效。");
@@ -107,19 +108,35 @@ internal static class Program
 
             if (hadPrevious)
             {
-                Directory.Move(installDirectory, backup);
+                try
+                {
+                    Directory.Move(installDirectory, backup);
+                }
+                catch (Exception error)
+                {
+                    throw new InvalidOperationException(
+                        $"安装位置不可替换：{installDirectory}\n\n" +
+                        "失败阶段：安装前目录占用/权限检查。\n" +
+                        $"原因：{error.Message}\n\n" +
+                        "请关闭占用该目录的程序，或选择其他目录。",
+                        error);
+                }
             }
             try
             {
                 Directory.Move(staging, installDirectory);
             }
-            catch
+            catch (Exception error)
             {
                 if (Directory.Exists(backup) && !Directory.Exists(installDirectory))
                 {
                     Directory.Move(backup, installDirectory);
                 }
-                throw;
+                throw new InvalidOperationException(
+                    $"新版文件无法落位：{installDirectory}\n\n" +
+                    $"原因：{error.Message}\n\n" +
+                    "旧版已尝试恢复；请关闭占用该目录的程序后重试，或选择其他目录。",
+                    error);
             }
 
             ApplyShortcutChoices(installDirectory, options);
@@ -194,6 +211,24 @@ internal static class Program
         {
             throw new InvalidOperationException(
                 $"所选目录不可写，请选择当前用户可写的安装位置：{parent}", error);
+        }
+
+        try
+        {
+            InstallDirectoryGuard.VerifySiblingDirectoryRename(parent);
+            InstallDirectoryGuard.ValidateExistingDirectory(full);
+        }
+        catch (InvalidOperationException)
+        {
+            throw;
+        }
+        catch (Exception error)
+        {
+            throw new InvalidOperationException(
+                $"安装位置安全检查失败：{full}\n\n" +
+                $"原因：{error.Message}\n\n" +
+                "请关闭占用该目录的程序，或选择其他目录。",
+                error);
         }
 
         var driveRoot = Path.GetPathRoot(full);
@@ -626,7 +661,7 @@ internal sealed class InstallForm : Form
     private void ShowOptionsPage()
     {
         var page = NewPage();
-        var header = Header("安装零售通", "Windows 本地经营工作空间 · v0.2.4");
+        var header = Header("安装零售通", "Windows 本地经营工作空间 · v0.2.6");
         var description = new Label
         {
             Text = "零售通把日常经营 Excel 整理成本地工作空间，帮助核对商品、库存、销量、计划、售后与货损。",

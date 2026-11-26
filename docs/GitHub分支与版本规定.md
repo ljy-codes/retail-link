@@ -6,7 +6,7 @@
 | --- | --- |
 | main | 完整工程的共享基线：server、backend、web、跨平台功能清单、通用测试、概览与答疑。共享业务规则只维护一份。 |
 | macos | 基于main的完整工程，维护Mac系统交互、应用与DMG构建、签名、Mac验证及发布记录。 |
-| windows | 基于main的完整工程，维护Windows系统交互、安装卸载、Windows验证及发布记录。当前技术交付为Windows v0.2.4。 |
+| windows | 基于main的完整工程，维护Windows系统交互、安装卸载、Windows验证及发布记录。当前技术交付为Windows v0.2.6。 |
 
 ## 开发顺序
 
@@ -16,18 +16,19 @@ Mac带头做功能、业务分析和覆盖测试；共享改动先进入main，�
 
 ## 本项目版本规则
 
-- 采用X.Y.Z；Mac的Z为奇数，Windows的Z为大于配对Mac补丁号的偶数。当前本机交付Mac0.2.1、Windows0.2.4，功能基线desktop-4。
+- 采用X.Y.Z；Mac的Z为奇数，Windows的Z为大于配对Mac补丁号的偶数。当前本机交付Mac0.2.1、Windows0.2.6，功能基线desktop-4。
 - 标签必须带平台后缀：`v<X.Y.Z>-macos`、`v<X.Y.Z>-windows`。
 - Mac v0.2.1构建源码标签使用`v0.2.1-macos`，锚定已验收提交`fbb54cf`；随后合并远端Windows工程与兼容改动并同步三个分支。新标签远端核对后按规则清理旧Mac标签，历史源码继续从Git提交历史追溯，不重写历史提交。
 - Windows v0.2.4构建源码标签使用`v0.2.4-windows`，对应GitHub Release保留安装包与Windows说明两个资产；已经发布的`v0.2.2-windows`保留，不覆盖或复用。
-- 后续Windows-only维护版本从0.2.4按2递增为0.2.6、0.2.8等，始终大于当前配对Mac补丁号；只有生成并验收新的Mac功能基线时才同步提升Mac奇数版本。
+- Windows v0.2.6构建源码标签使用`v0.2.6-windows`，对应GitHub Release保留安装包与Windows说明两个资产；已经发布的`v0.2.4-windows`和`v0.2.2-windows`保留，不覆盖或复用。
+- 后续Windows-only维护版本从0.2.6按2递增为0.2.8、0.3.0等，始终大于当前配对Mac补丁号；只有生成并验收新的Mac功能基线时才同步提升Mac奇数版本。
 - 每个平台长期只保留最新交付标签和下载入口；删除旧入口前先确认新版完整。历史源码始终从Git提交记录追溯，不重写历史提交。
 
 ## 交付与同步
 
 客户本地“产品交付”只保留最新安装包和对应HTML说明两文件。App、DMG、运行环境二进制、业务原表、运行数据、凭据及测试产物不提交到源码树。用户答疑和概览按既有授权及时同步；答疑已确认不等于功能已实现。
 
-当前经用户明确授权推送Windows0.2.4源码、文档及纯虚构测试，更新`windows`分支和`v0.2.4-windows`标签，并发布与标签对应的两个Release资产。发布说明标明配对Mac版本、共享源码、构建环境、验证范围与限制；技术验收、客户验收和完整业务验收分别表述，未完成项不得写成已通过。
+当前经用户明确授权推送Windows0.2.6源码、文档及纯虚构测试，更新`windows`分支和`v0.2.6-windows`标签，并发布与标签对应的两个Release资产。发布说明标明配对Mac版本、共享源码、构建环境、验证范围与限制；技术验收、客户验收和完整业务验收分别表述，未完成项不得写成已通过。
 
 规则参考：https://github.com/ljy-codes/api-workbench/blob/main/docs/platform-branch-and-version-policy.md 。本项目的Mac奇数／Windows偶数和“两文件交付”沿用用户已确定的约定。
 

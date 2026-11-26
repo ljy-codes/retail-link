@@ -1,6 +1,6 @@
 {
   "featureLevel": "desktop-4",
-  "macVersion": "0.2.1",
+  "macVersion": "0.2.7",
   "windowsVersion": "0.2.8",
   "minimumMacOS": "13.0",
   "features": [
@@ -37,7 +37,7 @@
     "dual_period_net_sales",
     "dual_loss_reconciliation",
     "reviewed_source_writeback",
-    "red_chart_icon"
+    "a02_channel_icon"
   ],
-  "pairedMacVersion": "0.2.1"
+  "pairedMacVersion": "0.2.7"
 }

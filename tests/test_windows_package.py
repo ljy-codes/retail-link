@@ -60,7 +60,7 @@ class WindowsPackageTests(unittest.TestCase):
         metadata = self.build.windows_metadata(self.release)
         self.assertEqual(metadata["version"], self.release["windowsVersion"])
         self.assertEqual(metadata["featureLevel"], "desktop-4")
-        self.assertEqual(metadata["pairedMacVersion"], "0.2.1")
+        self.assertEqual(metadata["pairedMacVersion"], self.release["macVersion"])
 
     def test_unsupported_feature_level_is_rejected(self):
         unsupported = dict(self.release, featureLevel="desktop-2")

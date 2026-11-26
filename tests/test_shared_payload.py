@@ -276,6 +276,17 @@ class SharedPayloadTests(unittest.TestCase):
         self.assertEqual(shared.default_delivery_dir(ordinary, "macOS"),
                          ordinary / "产品交付/macOS")
 
+    def test_nested_mac_checkout_publishes_to_the_user_project_directory(self):
+        shared = self.shared()
+        repo = self.root / "开发空间/GitHub工作区/retail-link"
+        self.assertEqual(shared.default_delivery_dir(repo, "macOS"),
+                         self.root / "产品交付")
+        self.assertEqual(shared.default_delivery_dir(repo, "Windows"),
+                         repo / "产品交付/Windows")
+        unrelated = self.root / "其他工程/GitHub工作区/retail-link"
+        self.assertEqual(shared.default_delivery_dir(unrelated, "macOS"),
+                         unrelated / "产品交付/macOS")
+
     def test_publishing_preserves_unknown_files_and_previous_artifacts(self):
         shared = self.shared()
         staging = self.root / "staging"

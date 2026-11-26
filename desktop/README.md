@@ -18,7 +18,7 @@ python3 -B desktop/build_macos.py --python-runtime /path/to/portable-python --pu
 
 编译包含 macos/Main.swift 和 macos/LifecycleSupport.swift。图标以 `docs/设计/图标概念/零售通-A02-通路.svg` 为唯一设计源，由 macOS 系统工具栅格化并生成 PNG、ICNS、ICO；不再在构建脚本中另画一套图形。产品交付仍仅最新 DMG 与对应 HTML 两文件。构建缓存按平台放在 `desktop/build/macos/`、`desktop/build/windows/`，互不清理；两平台共享业务载荷由 `shared_payload.py` 生成，包含逐文件大小和 SHA-256 清单。
 
-当前工作区的默认交付位置为 `E:\零售通\产品交付\macOS` 和 `E:\零售通\产品交付\Windows`，也可通过 `--delivery-dir` 指定。构建不会安装应用；目标目录出现未知文件时停止替换，保留现场。单文件或 ZIP 成员超过 300 MiB 时拒绝读取、复制和打包。
+Mac 本机采用 `开发空间/GitHub工作区/retail-link` 布局时，默认交付到外层项目的 `产品交付/`，该目录仅保留最新 DMG 和对应 HTML。`源码/` 布局继续交付到同级 `产品交付/<平台>/`，普通仓库继续交付到仓库内 `产品交付/<平台>/`；均可通过 `--delivery-dir` 指定。构建不会安装应用；目标目录出现未知文件时停止替换，保留现场。单文件或 ZIP 成员超过 300 MiB 时拒绝读取、复制和打包。
 
 ## 安装、升级与卸载契约
 

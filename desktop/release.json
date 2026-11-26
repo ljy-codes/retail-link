@@ -1,6 +1,6 @@
 {
   "featureLevel": "desktop-4",
-  "macVersion": "0.2.1",
+  "macVersion": "0.2.7",
   "windowsVersion": "0.2.8",
   "minimumMacOS": "13.0",
   "features": [
@@ -39,5 +39,5 @@
     "reviewed_source_writeback",
     "red_chart_icon"
   ],
-  "pairedMacVersion": "0.2.1"
+  "pairedMacVersion": "0.2.7"
 }

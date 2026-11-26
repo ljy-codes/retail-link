@@ -278,6 +278,11 @@ def remove_build_tree(path, build_root):
 
 def default_delivery_dir(repo, platform):
     repo = Path(repo)
+    # The local Mac workspace keeps the Git checkout beneath the development
+    # area, while its user-facing delivery directory lives at the project root.
+    if (platform == "macOS" and repo.parent.name == "GitHub工作区"
+            and repo.parent.parent.name == "开发空间"):
+        return repo.parents[2] / "产品交付"
     root = repo.parent if repo.name == "源码" else repo
     return root / "产品交付" / platform
 

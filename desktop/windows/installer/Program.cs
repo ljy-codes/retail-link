@@ -626,7 +626,7 @@ internal sealed class InstallForm : Form
     private void ShowOptionsPage()
     {
         var page = NewPage();
-        var header = Header("安装零售通", "Windows 本地经营工作空间 · v0.2.2");
+        var header = Header("安装零售通", "Windows 本地经营工作空间 · v0.2.4");
         var description = new Label
         {
             Text = "零售通把日常经营 Excel 整理成本地工作空间，帮助核对商品、库存、销量、计划、售后与货损。",

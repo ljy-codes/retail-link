@@ -81,7 +81,9 @@ def icon(resources):
 
 def build(python_source):
     assert int(VERSION.split(".")[-1]) % 2 == 1
-    assert int(RELEASE["windowsVersion"].split(".")[-1]) == int(VERSION.split(".")[-1]) + 1
+    windows_version = int(RELEASE["windowsVersion"].split(".")[-1])
+    assert windows_version > int(VERSION.split(".")[-1])
+    assert windows_version % 2 == 0
     BUILD.mkdir(parents=True, exist_ok=True)
     if APP.exists():
         shutil.rmtree(APP)

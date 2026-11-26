@@ -38,8 +38,11 @@ def validate_release(release):
         raise ValueError("Mac 与 Windows 的主次版本必须一致。")
     if mac[2] % 2 != 1:
         raise ValueError("Mac 补丁版本必须为奇数。")
-    if windows[2] != mac[2] + 1 or windows[2] % 2 != 0:
-        raise ValueError("Windows 补丁版本必须紧跟 Mac，且为偶数。")
+    # The first Windows package for a Mac feature line is Mac.Z+1. Later
+    # Windows-only maintenance deliveries advance by two while retaining the
+    # latest verified Mac pair, without inventing an unbuilt Mac release.
+    if windows[2] <= mac[2] or windows[2] % 2 != 0:
+        raise ValueError("Windows 补丁版本必须是大于 Mac 补丁版本的偶数。")
     return release
 
 
@@ -289,11 +292,23 @@ def smoke_backend(payload):
                     health = json.loads(response.read().decode("utf-8"))
                 if health.get("desktop") is not True or health.get("version") != payload_data["version"]:
                     raise RuntimeError("打包后端健康检查失败。")
+                if "data_health" not in (health.get("capabilities") or []):
+                    raise RuntimeError("打包后端缺少数据健康能力。")
                 # Exercise a real backend import, not only the dependency-free health route.
                 with urlopen(payload_data["url"] + "/api/import/templates", timeout=10) as response:
                     templates = json.loads(response.read().decode("utf-8"))
                 if not isinstance(templates.get("templates"), list):
                     raise RuntimeError("打包后端的业务模块检查失败。")
+                try:
+                    urlopen(payload_data["url"] + "/api/health/report", timeout=10)
+                except HTTPError as error:
+                    if error.code != 400:
+                        raise RuntimeError(f"打包数据健康接口返回了异常状态：{error.code}") from error
+                    message = json.loads(error.read().decode("utf-8")).get("error", "")
+                    if "分析快照" not in message:
+                        raise RuntimeError("打包数据健康接口缺少快照校验。") from error
+                else:
+                    raise RuntimeError("打包数据健康接口未校验快照参数。")
                 try:
                     urlopen(payload_data["url"] + "/api/sample", timeout=10)
                 except HTTPError as error:

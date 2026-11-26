@@ -7,6 +7,7 @@ from pathlib import Path
 import tempfile
 import threading
 import unittest
+from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -67,6 +68,39 @@ class DataHealthHttpTests(unittest.TestCase):
         self.assertEqual(payload["snapshotId"], snapshot["id"])
         self.assertEqual(payload["scope"]["productCount"], 1)
         self.assertEqual(next(item for item in payload["metrics"] if item["key"] == "stockCoverage")["status"], "blocked")
+
+    def test_report_route_requires_a_known_snapshot(self):
+        for suffix in ("", "?snapshotId=missing-snapshot"):
+            with self.assertRaises(HTTPError) as caught:
+                urlopen(self.base + "/api/health/report" + suffix, timeout=10)
+            self.assertEqual(caught.exception.code, 400)
+            payload = json.loads(caught.exception.read())
+            self.assertIn("error", payload)
+
+    def test_deleted_snapshot_requires_deleted_flag(self):
+        snapshot = host.history_store().save({
+            "filename": "删除后报告.xlsx",
+            "period": "2026-11",
+            "asOf": "2026-11-01",
+            "products": [],
+            "summary": {},
+            "sources": [],
+            "issues": [],
+        })
+        host.history_store().delete(snapshot["id"])
+
+        with self.assertRaises(HTTPError) as caught:
+            urlopen(self.base + "/api/health/report?snapshotId=" + snapshot["id"], timeout=10)
+        self.assertEqual(caught.exception.code, 400)
+
+        with urlopen(
+            self.base + "/api/health/report?snapshotId=" + snapshot["id"] + "&deleted=1",
+            timeout=10,
+        ) as response:
+            self.assertEqual(response.status, 200)
+            payload = json.loads(response.read())
+        self.assertEqual(payload["snapshotId"], snapshot["id"])
+        self.assertEqual(payload["status"], "blocked")
 
 
 if __name__ == "__main__":

@@ -260,6 +260,7 @@ main{padding:31px 36px 0;max-width:1680px;margin:auto}
 .modal-backdrop,.drawer-backdrop{position:fixed;inset:0;background:var(--overlay,rgba(15,20,35,.48));backdrop-filter:blur(3px);z-index:60;display:flex;align-items:center;justify-content:center;padding:24px;animation:fade-in .15s}
 .modal{width:min(920px,100%);max-height:90vh;display:flex;flex-direction:column;background:var(--paper);border-radius:13px;box-shadow:0 25px 90px rgba(20,28,45,.12);overflow:hidden}
 .modal.small{width:660px}
+@media(min-width:980px){.modal-backdrop{justify-content:flex-end;align-items:stretch;padding:0;background:color-mix(in srgb,var(--overlay,rgba(15,20,35,.48)) 55%,transparent);backdrop-filter:none}.modal-backdrop .modal{width:min(860px,calc(100vw - 250px));max-height:none;height:100%;border-radius:14px 0 0 14px;animation:slide-in .18s ease-out}}
 .modal-header{padding:23px 27px 18px;display:flex;align-items:flex-start;justify-content:space-between;border-bottom:1px solid var(--line)}
 .modal-header h2{font-size:calc(18px * var(--ui-scale,1));margin:0;font-weight:600}
 .modal-header p{font-size:calc(12px * var(--ui-scale,1));color:var(--muted);margin:5px 0 0}

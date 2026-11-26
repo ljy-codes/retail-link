@@ -1,11 +1,11 @@
 {
   "name": "零售通",
-  "version": "0.2.1",
+  "version": "0.2.9",
   "featureLevel": "desktop-4",
-  "pairedWindowsVersion": "0.2.8",
-  "buildStatus": "shared-source-awaiting-platform-acceptance",
+  "pairedWindowsVersion": "0.2.10",
+  "buildStatus": "shared-workbench-awaiting-platform-verification",
   "releaseDate": "2026-11-26",
   "lastVerifiedMacTag": "v0.2.1-macos",
   "lastVerifiedWindowsTag": "v0.2.6-windows",
-  "candidatePurpose": "main共享工程基线；平台构建生成各自版本信息，Windows0.2.8待人工安装，Mac待重新构建验收"
+  "candidatePurpose": "Mac0.2.9工作台修复；Windows0.2.10为待对应平台适配与验收的预留目标"
 }

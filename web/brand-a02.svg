@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none" role="img" aria-labelledby="a02-title a02-desc">
+  <title id="a02-title">零售通 Retail Link · A02 通路</title>
+  <desc id="a02-desc">深青绿圆角方形中，一条浅薄荷色粗壮通路由左下向右上连续贯通；两次宽圆角转向与圆润端点形成简洁、开放的纵向轮廓。</desc>
+  <rect width="512" height="512" rx="112" fill="#0B4F4A"/>
+  <path d="M 168 392 V 308 A 52 52 0 0 1 220 256 H 292 A 52 52 0 0 0 344 204 V 120" stroke="#DEFFF2" stroke-width="80" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

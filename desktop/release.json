@@ -1,7 +1,7 @@
 {
   "featureLevel": "desktop-4",
-  "macVersion": "0.2.7",
-  "windowsVersion": "0.2.8",
+  "macVersion": "0.2.9",
+  "windowsVersion": "0.2.10",
   "minimumMacOS": "13.0",
   "features": [
     "reviewed_import",
@@ -37,7 +37,10 @@
     "dual_period_net_sales",
     "dual_loss_reconciliation",
     "reviewed_source_writeback",
-    "red_chart_icon"
+    "a02_channel_icon",
+    "persistent_workspace_pages",
+    "detachable_workspace_views",
+    "workbench_charts"
   ],
-  "pairedMacVersion": "0.2.7"
+  "pairedMacVersion": "0.2.9"
 }

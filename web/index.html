@@ -12,6 +12,9 @@
   <link rel="stylesheet" href="/ui-foundation.css">
   <link rel="stylesheet" href="/appearance.css">
   <link rel="stylesheet" href="/operations.css">
+  <link rel="stylesheet" href="/workbench.css">
+  <link rel="stylesheet" href="/workspace.css">
+  <link rel="icon" href="/brand-a02.svg" type="image/svg+xml">
   <script src="/appearance.js"></script>
 </head>
 <body>
@@ -61,6 +64,7 @@
   <div id="drag-overlay" hidden><div><svg class="icon"><use href="#i-upload"/></svg><h2>松开文件，开始分析</h2><p>支持 .xlsx 和 .xlsm 工作簿</p></div></div>
   <div id="busy-overlay" hidden aria-live="polite"><div class="busy-card"><div class="spinner"></div><strong id="busy-label">正在分析工作簿</strong><span>整理数据与计算指标，请稍候</span></div></div>
   <div id="toast-root" aria-live="polite"></div>
+  <script src="/workspace.js"></script>
   <script type="module" src="/app.js"></script>
   <script defer src="/daily.js"></script>
   <script defer src="/dataset.js"></script>

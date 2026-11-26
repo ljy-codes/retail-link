@@ -10,7 +10,7 @@ const assert = require('node:assert/strict');
 const root = path.resolve(__dirname, '..');
 const sourcePath = path.join(root, 'web', 'appearance.js');
 const expectedPalettes = {
-  focus: ['#E3E7F0', '#2A214D'],
+  focus: ['#0B4F4A', '#DEFFF2'],
   violet: ['#A99AFF', '#7054DE'],
 };
 const originalBusinessValue = JSON.stringify([{ name: '业务配置', config: { targetRate: 0.85 } }]);
@@ -138,18 +138,20 @@ function contrast(foreground, background, env) {
 const tests = [];
 function test(name, callback) { tests.push([name, callback]); }
 
-test('首次启动默认跟随浅色系统且使用默认配色、标准字号', () => {
+test('首次启动默认深色通路青绿工作台、标准字号', () => {
   const env = environment();
-  assert.deepEqual(prefs(env), { mode: 'system', palette: 'focus', fontSize: 'standard' });
-  assert.equal(env.html.dataset.colorMode, 'system');
-  assert.equal(env.html.dataset.theme, 'light');
+  assert.deepEqual(prefs(env), { mode: 'dark', palette: 'focus', fontSize: 'standard' });
+  assert.equal(env.html.dataset.colorMode, 'dark');
+  assert.equal(env.html.dataset.theme, 'dark');
   assert.equal(env.html.dataset.palette, 'focus');
   assert.equal(env.html.dataset.fontSize, 'standard');
 });
-test('首次启动在深色系统上立即应用深色', () => {
+test('默认深色不依赖系统模式且DOM就绪前已应用', () => {
   const env = environment({ dark: true });
   assert.equal(env.html.dataset.theme, 'dark');
-  assert.equal(env.html.dataset.colorMode, 'system');
+  assert.equal(env.html.dataset.colorMode, 'dark');
+  env.changeSystem(false);
+  assert.equal(env.html.dataset.theme, 'dark');
   assert.ok(env.styles.get('--paper'), 'DOM尚未就绪时已经应用主题变量');
 });
 test('跟随系统模式响应系统变化但保留配色与字号', () => {
@@ -162,6 +164,11 @@ test('跟随系统模式响应系统变化但保留配色与字号', () => {
   env.changeSystem(false);
   assert.equal(env.html.dataset.theme, 'light');
   assert.equal(prefs(env).mode, 'system');
+  const restored = environment({ seed: env.snapshot(), dark: true });
+  assert.equal(prefs(restored).mode, 'system');
+  assert.equal(restored.html.dataset.theme, 'dark');
+  restored.changeSystem(false);
+  assert.equal(restored.html.dataset.theme, 'light');
 });
 test('明确选择浅色时不被深色系统覆盖', () => {
   const env = environment({ dark: true });
@@ -169,6 +176,9 @@ test('明确选择浅色时不被深色系统覆盖', () => {
   env.changeSystem(false); env.changeSystem(true);
   assert.equal(env.html.dataset.theme, 'light');
   assert.equal(env.html.dataset.colorMode, 'light');
+  const restored = environment({ seed: env.snapshot(), dark: true });
+  assert.equal(prefs(restored).mode, 'light');
+  assert.equal(restored.html.dataset.theme, 'light');
 });
 test('明确选择深色时不被浅色系统覆盖', () => {
   const env = environment();
@@ -210,11 +220,11 @@ test('损坏JSON与非法枚举回落到有效默认配置', () => {
   const appearanceKey = baseline.writes.find(([key]) => key !== businessKey)?.[0];
   assert.ok(appearanceKey, '外观使用独立持久化键');
   const broken = environment({ seed: { [appearanceKey]: '{oops' } });
-  assert.equal(broken.html.dataset.colorMode, 'system');
+  assert.equal(broken.html.dataset.colorMode, 'dark');
   const invalid = environment({ seed: { [appearanceKey]: JSON.stringify({ mode: 'sepia', palette: 'missing', fontSize: 'tiny' }) } });
-  assert.deepEqual(prefs(invalid), { mode: 'system', palette: 'focus', fontSize: 'standard' });
+  assert.deepEqual(prefs(invalid), { mode: 'dark', palette: 'focus', fontSize: 'standard' });
 });
-test('8组配色保留原始参考色，不按用户身份限制选择', () => {
+test('2组配色保留品牌参考色，不按用户身份限制选择', () => {
   const env = environment();
   assert.equal(env.api.palettes.length, 2);
   for (const [id, colors] of Object.entries(expectedPalettes)) {
@@ -241,6 +251,7 @@ test('4种配色明暗组合的正文、次级、弱文本及按钮对比达标'
     ['--ink', '--canvas'], ['--accent-contrast', '--purple'],
     ['--accent-contrast', '--purple-dark'], ['--purple', '--purple-soft'],
     ['--nav-strong', '--nav'], ['--nav-text', '--nav'], ['--nav-muted', '--nav'],
+    ['--muted', '--surface-subtle'], ['--text-secondary', '--surface-raised'],
   ];
   for (const mode of ['light', 'dark']) {
     for (const palette of Object.keys(expectedPalettes)) {
@@ -279,7 +290,7 @@ test('改变外观无需联网、无需触碰业务数据', () => {
 });
 test('动态玻璃效果默认关闭且可独立切换，不影响主题模式', () => {
   const env = environment({ dark: true });
-  assert.equal(prefs(env).mode, 'system');
+  assert.equal(prefs(env).mode, 'dark');
   assert.equal(env.html.dataset.glass, 'off');
   env.api.applyPreferences({ glass: true });
   assert.equal(env.html.dataset.glass, 'on');

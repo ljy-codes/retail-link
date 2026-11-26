@@ -8,7 +8,10 @@
   const fields = {date:'业务日期',product:'商品标识',name:'商品名称',shop:'店铺／仓库',price:'当日售价',salesQuantity:'当日销量',specification:'规格',sourceSku:'来源SKU',sourceSystem:'来源系统',warehouseId:'仓库ID'};
   const state = {tab:'records',items:[],total:0,offset:0,limit:200,hasMore:false,start:'',end:'',product:'',shop:'',deleted:false,trendKey:'',busy:false,notice:'',error:false,editing:null,inspection:null,importData:null,preview:null,previewSettings:null,previewKey:null,previewOffset:0,previewFilter:'all',importEpoch:0,recordsEpoch:0,actionBusy:false,catalogItems:[],catalogBusy:false,catalogEditing:null,catalogFile:null,catalogSheet:'',catalogConflict:'skip',catalogPreview:null,catalogSettings:null,catalogKey:null,catalogOffset:0,catalogFilter:'all',catalogEpoch:0};
   const seriesKey = item => [item.product,item.specification||'',item.source?.catalog?'':item.sourceSku||'',item.source?.catalog?'':item.sourceSystem||'',item.warehouseId||item.shop].join('\u0000');
-  let root, previousOverflow='';
+  let root, navButton, previousOverflow='',initialized=false;
+  const inWorkspace=()=>Boolean(window.RetailLinkWorkspace);
+  const rootDocument=()=>root?.ownerDocument||document;
+  function selectFileInput(input){const doc=rootDocument();if(input.ownerDocument!==doc)doc.body.append(input);input.click();}
   const $ = selector => root.querySelector(selector);
   async function request(url, body, method) {
     const response = await fetch(url, {method:method || (body===undefined?'GET':'POST'),headers:body===undefined?{}:{'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});
@@ -22,10 +25,11 @@
     if(original?.filename)return `${original.filename}${original.sheet?' · '+original.sheet:''}${original.row?' 第'+original.row+'行':''}${original.priceCell?' · 售价 '+original.priceCell:''}${original.salesCell?'／销量 '+original.salesCell:''}${source?.catalog?'（已应用商品关联）':''}`;
     return original?.type||'手动记录';
   }
-  function close(){root.hidden=true;document.body.style.overflow=previousOverflow;}
-  function open(){previousOverflow=document.body.style.overflow;root.hidden=false;document.body.style.overflow='hidden';state.tab='records';render();loadRecords();}
-  function frame(body){return `<section class="dr-panel" role="dialog" aria-modal="true" aria-labelledby="dr-title"><header class="dr-header"><div><span class="dr-eyebrow">DAILY OBSERVATIONS</span><h2 id="dr-title">每日价格与销量</h2><p>按日期保存每款商品的售价与销量，明天的价格不会覆盖昨天。</p></div><button class="dr-close" data-dr="close" aria-label="关闭每日价格与销量">×</button></header><nav class="dr-tabs" aria-label="日记录功能">${[['records','日记录'],['import','导入价格表'],['catalog','商品关联'],['manual',state.editing?'修改记录':'手动记录']].map(([tab,label])=>`<button data-dr-tab="${tab}" class="${state.tab===tab?'active':''}">${label}</button>`).join('')}</nav><div id="dr-notice" class="dr-notice ${state.error?'error':''}" role="status" ${state.notice?'':'hidden'}>${escape(state.notice)}</div><div class="dr-body">${body}</div><footer class="dr-footer"><span>本机持久保存 · 原始文件不改写 · 空白代表未知</span><button class="dr-btn" data-dr="close">关闭</button></footer></section>`;}
-  function render(){root.innerHTML=frame(state.tab==='records'?recordsView():state.tab==='import'?importView():state.tab==='catalog'?catalogView():manualView());refreshBusy();}
+  function close(){if(inWorkspace()){window.RetailLinkWorkspace.activate('dashboard');return;}root.hidden=true;document.body.style.overflow=previousOverflow;}
+  function initialize(){if(initialized)return;initialized=true;render();loadRecords();}
+  function open(){if(inWorkspace()){window.RetailLinkWorkspace.activate('daily');initialize();return;}previousOverflow=document.body.style.overflow;root.hidden=false;document.body.style.overflow='hidden';state.tab='records';render();loadRecords();}
+  function frame(body){return `<section class="dr-panel" role="${inWorkspace()?'region':'dialog'}" aria-modal="${inWorkspace()?'false':'true'}" aria-labelledby="dr-title"><header class="dr-header"><div><span class="dr-eyebrow">DAILY OBSERVATIONS</span><h2 id="dr-title">每日价格与销量</h2><p>按日期保存每款商品的售价与销量，明天的价格不会覆盖昨天。</p></div><button class="dr-close" data-dr="close" aria-label="${inWorkspace()?'返回电商看盘':'关闭每日价格与销量'}">${inWorkspace()?'返回看盘':'×'}</button></header><nav class="dr-tabs" aria-label="日记录功能">${[['records','日记录'],['import','导入价格表'],['catalog','商品关联'],['manual',state.editing?'修改记录':'手动记录']].map(([tab,label])=>`<button data-dr-tab="${tab}" class="${state.tab===tab?'active':''}">${label}</button>`).join('')}</nav><div id="dr-notice" class="dr-notice ${state.error?'error':''}" role="status" ${state.notice?'':'hidden'}>${escape(state.notice)}</div><div class="dr-body">${body}</div><footer class="dr-footer"><span>本机持久保存 · 原始文件不改写 · 空白代表未知</span><button class="dr-btn" data-dr="close">${inWorkspace()?'返回看盘':'关闭'}</button></footer></section>`;}
+  function render(){root.innerHTML=frame(state.tab==='records'?recordsView():state.tab==='import'?importView():state.tab==='catalog'?catalogView():manualView());refreshBusy();window.RetailLinkWorkspace?.refresh('daily');}
   function refreshBusy(){root.setAttribute('aria-busy',String(state.actionBusy));root.querySelectorAll('[data-dr-write],button[type="submit"]').forEach(button=>{button.disabled=state.actionBusy||(button.dataset.dr==='commit'&&!state.preview?.validCount)||(button.dataset.dr==='commit-catalog'&&!state.catalogPreview?.validCount);});}
   async function exclusive(operation){if(state.actionBusy)return;state.actionBusy=true;refreshBusy();try{return await operation();}finally{state.actionBusy=false;refreshBusy();}}
   function recordsView(){return `<div class="dr-toolbar"><label>开始日期<input id="dr-start" type="date" value="${escape(state.start)}"></label><label>结束日期<input id="dr-end" type="date" value="${escape(state.end)}"></label><label>商品<input id="dr-product" placeholder="商品标识或名称" value="${escape(state.product)}"></label><label>店铺／仓库<input id="dr-shop" placeholder="全部" value="${escape(state.shop)}"></label><button class="dr-btn primary" data-dr="filter">筛选</button><label class="dr-checkbox"><input id="dr-deleted" type="checkbox" ${state.deleted?'checked':''}>已删除记录</label></div><div class="dr-export-actions"><span>导出当前筛选的全部记录，包含其他分页。</span><div><button class="dr-btn small" data-dr="export-xlsx" data-dr-write>导出 Excel</button><button class="dr-btn small" data-dr="export-csv" data-dr-write>导出 CSV</button></div></div><div class="dr-note">记录的是指定日期的售价与当日销量；售价不代表真实成交均价，不能把最新售价套用到过去销量。</div><div id="dr-records-content">${recordsContent()}</div>`;}
@@ -144,7 +148,7 @@
   function captureFilters(){if(!$('#dr-start'))return;state.start=$('#dr-start').value;state.end=$('#dr-end').value;state.product=$('#dr-product').value.trim();state.shop=$('#dr-shop').value.trim();state.deleted=$('#dr-deleted').checked;}
   async function exportRecords(formatName){
     if(state.actionBusy)return;captureFilters();
-    return exclusive(async()=>{try{const q=new URLSearchParams({format:formatName,start:state.start,end:state.end,product:state.product,shop:state.shop,deleted:state.deleted?'1':'0'});const result=await request('/api/daily/export?'+q);const binary=atob(result.dataBase64),bytes=Uint8Array.from(binary,c=>c.charCodeAt(0)),url=URL.createObjectURL(new Blob([bytes],{type:result.contentType}));const anchor=document.createElement('a');anchor.href=url;anchor.download=result.filename;document.body.append(anchor);anchor.click();anchor.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);notify('已生成当前筛选范围的全部日记录，保存位置由下载窗口选择。');}catch(error){notify(error.message,true);}});
+    return exclusive(async()=>{try{const q=new URLSearchParams({format:formatName,start:state.start,end:state.end,product:state.product,shop:state.shop,deleted:state.deleted?'1':'0'});const result=await request('/api/daily/export?'+q);const binary=atob(result.dataBase64),bytes=Uint8Array.from(binary,c=>c.charCodeAt(0)),url=URL.createObjectURL(new Blob([bytes],{type:result.contentType}));const doc=rootDocument(),anchor=doc.createElement('a');anchor.href=url;anchor.download=result.filename;doc.body.append(anchor);anchor.click();anchor.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);notify('已生成当前筛选范围的全部日记录，保存位置由下载窗口选择。');}catch(error){notify(error.message,true);}});
   }
   function catalogView(){
     if(state.catalogBusy)return '<div class="dr-note" role="status">正在读取已保存的商品关联…</div>';
@@ -170,14 +174,15 @@
     if(state.actionBusy||!state.catalogPreview?.validCount||!state.catalogSettings)return;captureCatalogImport();if(JSON.stringify(catalogImportSettings(false))!==state.catalogKey){invalidatePreview(true);notify('关联导入设置已变化，请重新预览。',true);return;}
     return exclusive(async()=>{try{const result=await request('/api/daily/catalog/import',state.catalogSettings);invalidatePreview(true);invalidatePreview();await loadCatalog();notify(`关联已保存：新增 ${result.saved||0} 条，更新 ${result.replaced||0} 条，跳过 ${result.skipped||0} 条。`);}catch(error){invalidatePreview(true);render();notify(error.message,true);}});
   }
-  async function revisionView(id){try{const current=state.items.find(item=>item.id===id);const data=await request('/api/daily/'+encodeURIComponent(id)+'/revisions');const box=document.createElement('div');box.className='dr-revision-overlay';box.innerHTML=`<section role="dialog" aria-modal="true" aria-label="日记录旧版本"><div class="dr-section-heading"><h3>${escape(current?.name||'商品')} · 修改前版本</h3><button class="dr-btn small" data-dr="close-revisions">关闭</button></div><p class="dr-muted">历史版本只供查看，当前值保存在日记录表中。</p>${data.items.length?`<div class="dr-table-scroll"><table class="dr-table"><thead><tr><th>保存时点</th><th>操作</th><th>业务日期</th><th>售价</th><th>销量</th><th>原来源</th></tr></thead><tbody>${data.items.map(item=>`<tr><td>${escape(stamp(item.savedAt))}</td><td>${escape({replace:'更新前',delete:'删除前',restore:'恢复前'}[item.action]||item.action)}</td><td>${escape(item.record.date)}</td><td>${format(item.record.price)}</td><td>${format(item.record.salesQuantity)}</td><td>${escape(sourceText(item.record.source))}</td></tr>`).join('')}</tbody></table></div>`:'<div class="dr-empty">这条记录尚未修改，没有旧版本。</div>'}</section>`;root.append(box);}catch(error){notify(error.message,true);}}
+  async function revisionView(id){try{const current=state.items.find(item=>item.id===id);const data=await request('/api/daily/'+encodeURIComponent(id)+'/revisions');const box=rootDocument().createElement('div');box.className='dr-revision-overlay';box.innerHTML=`<section role="dialog" aria-modal="true" aria-label="日记录旧版本"><div class="dr-section-heading"><h3>${escape(current?.name||'商品')} · 修改前版本</h3><button class="dr-btn small" data-dr="close-revisions">关闭</button></div><p class="dr-muted">历史版本只供查看，当前值保存在日记录表中。</p>${data.items.length?`<div class="dr-table-scroll"><table class="dr-table"><thead><tr><th>保存时点</th><th>操作</th><th>业务日期</th><th>售价</th><th>销量</th><th>原来源</th></tr></thead><tbody>${data.items.map(item=>`<tr><td>${escape(stamp(item.savedAt))}</td><td>${escape({replace:'更新前',delete:'删除前',restore:'恢复前'}[item.action]||item.action)}</td><td>${escape(item.record.date)}</td><td>${format(item.record.price)}</td><td>${format(item.record.salesQuantity)}</td><td>${escape(sourceText(item.record.source))}</td></tr>`).join('')}</tbody></table></div>`:'<div class="dr-empty">这条记录尚未修改，没有旧版本。</div>'}</section>`;root.append(box);}catch(error){notify(error.message,true);}}
   function boot(){
     root=document.createElement('div');root.id='daily-root';root.className='dr-overlay';root.hidden=true;document.body.append(root);
-    const nav=document.querySelector('nav[aria-label="主导航"]');if(nav){const button=document.createElement('button');button.className='nav-item';button.type='button';button.setAttribute('aria-label','每日价格与销量');button.innerHTML='<svg class="icon"><use href="#i-chart"/></svg><span>每日价格与销量</span>';button.addEventListener('click',event=>{event.stopPropagation();open();});nav.append(button);}
+    const nav=document.querySelector('nav[aria-label="主导航"]');if(nav){navButton=document.createElement('button');navButton.className='nav-item';navButton.type='button';navButton.setAttribute('aria-label','每日价格与销量');navButton.innerHTML='<svg class="icon"><use href="#i-chart"/></svg><span>每日价格与销量</span>';navButton.addEventListener('click',event=>{event.stopPropagation();open();});nav.append(navButton);}
+    window.RetailLinkWorkspace?.register('daily',{root,title:'每日价格与销量',nav:navButton,open:initialize});
     const fileInput=document.createElement('input');fileInput.type='file';fileInput.accept='.xlsx,.xlsm';fileInput.hidden=true;fileInput.id='dr-file-input';document.body.append(fileInput);let filePurpose='daily';
     fileInput.addEventListener('change',()=>{chooseFile(fileInput.files[0],filePurpose==='catalog');fileInput.value='';});
     root.addEventListener('click',async event=>{
-      event.stopPropagation();if(event.target===root){close();return;}const target=event.target.closest('button');if(!target||target.disabled)return;
+      event.stopPropagation();if(event.target===root){if(!inWorkspace())close();return;}const target=event.target.closest('button');if(!target||target.disabled)return;
       const action=target.dataset.dr;
       if(action==='close'){close();return;}if(action==='close-revisions'){$('.dr-revision-overlay')?.remove();return;}
       if(state.actionBusy)return;
@@ -193,8 +198,8 @@
         else if(action==='filter'){captureFilters();state.offset=0;await loadRecords();}
         else if(action==='previous'){state.offset=Math.max(0,state.offset-state.limit);await loadRecords();}
         else if(action==='next'){state.offset+=state.limit;await loadRecords();}
-        else if(action==='choose-file'){filePurpose='daily';fileInput.click();}
-        else if(action==='choose-catalog-file'){filePurpose='catalog';fileInput.click();}
+        else if(action==='choose-file'){filePurpose='daily';selectFileInput(fileInput);}
+        else if(action==='choose-catalog-file'){filePurpose='catalog';selectFileInput(fileInput);}
         else if(action==='preview')await previewImport();
         else if(action==='commit')await commitImport();
         else if(action==='preview-catalog')await previewCatalog();
@@ -230,7 +235,9 @@
     root.addEventListener('input',event=>{if(event.target.closest('.dr-import-settings'))invalidatePreview();else if(event.target.id==='dr-catalog-sheet'||event.target.id==='dr-catalog-conflict')invalidatePreview(true);});
     root.addEventListener('dragover',event=>{event.preventDefault();event.stopPropagation();});
     root.addEventListener('drop',event=>{event.preventDefault();event.stopPropagation();if(state.tab==='import'||state.tab==='catalog')chooseFile(event.dataTransfer.files[0],state.tab==='catalog');});
-    document.addEventListener('keydown',event=>{if(!root.hidden&&event.key==='Escape'){event.preventDefault();event.stopImmediatePropagation();const revision=$('.dr-revision-overlay');if(revision)revision.remove();else close();}},true);
+    const keyboard=doc=>doc.addEventListener('keydown',event=>{if(doc!==rootDocument()||root.hidden)return;if(event.key==='Escape'){const revision=$('.dr-revision-overlay');if(revision){event.preventDefault();event.stopImmediatePropagation();revision.remove();}else if(!inWorkspace()){event.preventDefault();event.stopImmediatePropagation();close();}}},true);
+    if(window.RetailLinkWorkspace?.onDocument)window.RetailLinkWorkspace.onDocument(keyboard);else keyboard(document);
+    window.RetailLinkDaily=Object.freeze({open,close});
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
 })();

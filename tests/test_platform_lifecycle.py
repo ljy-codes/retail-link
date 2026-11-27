@@ -368,6 +368,7 @@ internal partial class MainForm : IAsyncDisposable
     private FeatureWindow? FindFeatureWindow(object? sender) => null;
     private Task CloseFeatureWindowAsync(FeatureWindow featureWindow, string? message = null) =>
         Task.CompletedTask;
+    private void ShowOnboardingIfNeeded() {}
     private sealed class FeatureWindow {}
 }
 internal sealed class FakeWebView(Action navigated)

@@ -110,6 +110,41 @@ class WindowsPackageTests(unittest.TestCase):
         self.assertIn("NewWindowRequested", main)
         self.assertIn("CloseFeatureWindowAsync", main)
 
+    def test_windows_host_exposes_the_mac_lifecycle_and_system_menus(self):
+        main = (WINDOWS / "app" / "MainForm.cs").read_text(encoding="utf-8")
+        for text in (
+            "关于零售通",
+            "安装与升级…",
+            "使用与数据说明…",
+            "编辑",
+            "撤销",
+            "剪切",
+            "复制",
+            "粘贴",
+            "全选",
+            "窗口",
+            "最小化",
+            "缩放",
+            "前置全部窗口",
+            "帮助",
+            "显示本地数据位置",
+            "OpenInstallUpgrade",
+            "ShowOnboarding",
+        ):
+            self.assertIn(text, main)
+        self.assertIn("新版安装包", main)
+        self.assertIn("desktop_onboarding.json", main)
+
+    def test_windows_host_uses_the_packaged_application_icon_for_all_native_windows(self):
+        main = (WINDOWS / "app" / "MainForm.cs").read_text(encoding="utf-8")
+        for text in (
+            "Icon = LoadApplicationIcon()",
+            "form.Icon = CloneIcon(Icon)",
+            "private static Icon LoadApplicationIcon()",
+            "private static Icon? CloneIcon(Icon? icon)",
+        ):
+            self.assertIn(text, main)
+
     def test_payload_guard_rejects_user_data_build_cache_and_installer_sources(self):
         forbidden = [
             Path("app/本地数据/history.json"),
@@ -435,7 +470,19 @@ static class Harness
         self.assertIn('WINDOWS / "使用说明.html"', source)
         self.assertNotIn('shutil.copy2(DESKTOP / "使用说明.html", app / "使用说明.html")', source)
 
-    def test_generated_icon_uses_red_chart_branding(self):
+    def test_a02_icon_source_and_generated_windows_icon_use_the_shared_branding(self):
+        source = ROOT / "docs" / "设计" / "图标概念" / "零售通-A02-通路.svg"
+        self.assertTrue(source.is_file())
+        source_text = source.read_text(encoding="utf-8")
+        self.assertIn("#0B4F4A", source_text)
+        self.assertIn("#DEFFF2", source_text)
+        builder = (WINDOWS / "build_windows.py").read_text(encoding="utf-8")
+        self.assertIn("docs/设计/图标概念/零售通-A02-通路.svg", builder)
+        self.assertIn("#0B4F4A", builder)
+        self.assertIn("#DEFFF2", builder)
+        self.assertNotIn("旧红色折线", builder)
+        self.assertNotIn("strong red rising line", builder)
+
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "RetailLink.ico"
             self.build.write_icon(path)
@@ -458,20 +505,23 @@ static class Harness
             rgba = pixels[128 * stride + 1 + 128 * 4:128 * stride + 5 + 128 * 4]
             self.assertGreater(width, 64)
             self.assertEqual(height, width)
-            self.assertGreater(rgba[0], rgba[1] + 40, rgba)
-            self.assertGreater(rgba[0], rgba[2] + 40, rgba)
+            self.assertEqual(tuple(rgba), (222, 255, 242, 255), rgba)
+            green_pixels = 0
+            mint_pixels = 0
             red_pixels = 0
-            light_pixels = 0
             for row in range(height):
                 start = row * stride + 1
                 for column in range(width):
                     red, green, blue, alpha = pixels[start + column * 4:start + column * 4 + 4]
+                    if alpha > 200 and green > red + 35 and green > blue - 20:
+                        green_pixels += 1
+                    if alpha > 200 and green > 220 and blue > 220 and red > 180:
+                        mint_pixels += 1
                     if alpha > 200 and red > green + 60 and red > blue + 40:
                         red_pixels += 1
-                    if alpha > 200 and min(red, green, blue) > 220:
-                        light_pixels += 1
-            self.assertGreater(red_pixels, 5000)
-            self.assertGreater(light_pixels, 20000)
+            self.assertGreater(green_pixels, 20000)
+            self.assertGreater(mint_pixels, 3000)
+            self.assertLess(red_pixels, 100)
 
     def test_powershell_script_is_packaged_with_utf8_bom(self):
         source = WINDOWS / "uninstall" / "uninstall.ps1"

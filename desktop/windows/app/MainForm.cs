@@ -32,6 +32,7 @@ internal sealed class MainForm : Form
     public MainForm()
     {
         Text = "零售通";
+        Icon = LoadApplicationIcon();
         StartPosition = FormStartPosition.CenterScreen;
         MinimumSize = new Size(900, 640);
         ClientSize = new Size(1280, 850);
@@ -51,16 +52,50 @@ internal sealed class MainForm : Form
     {
         var menu = new MenuStrip { Dock = DockStyle.Top };
         var application = new ToolStripMenuItem("应用");
-        application.DropDownItems.Add("显示本地数据位置", null, (_, _) => ShowDataDirectory());
-        application.DropDownItems.Add("打开使用说明", null, (_, _) => OpenManual());
+        application.DropDownItems.Add("关于零售通", null, (_, _) => ShowAbout());
+        application.DropDownItems.Add(new ToolStripSeparator());
+        application.DropDownItems.Add("安装与升级…", null, (_, _) => OpenInstallUpgrade());
+        application.DropDownItems.Add("使用与数据说明…", null, (_, _) => ShowOnboarding());
         application.DropDownItems.Add("显示启动诊断", null, (_, _) => OpenStartupDiagnostics());
         application.DropDownItems.Add(new ToolStripSeparator());
         application.DropDownItems.Add("卸载零售通…", null, (_, _) => OpenUninstallSettings());
         application.DropDownItems.Add(new ToolStripSeparator());
         application.DropDownItems.Add("退出", null, (_, _) => Close());
         menu.Items.Add(application);
+
+        var edit = new ToolStripMenuItem("编辑");
+        edit.DropDownItems.Add(EditorMenuItem("撤销", Keys.Control | Keys.Z, "undo"));
+        edit.DropDownItems.Add(EditorMenuItem("剪切", Keys.Control | Keys.X, "cut"));
+        edit.DropDownItems.Add(EditorMenuItem("复制", Keys.Control | Keys.C, "copy"));
+        edit.DropDownItems.Add(EditorMenuItem("粘贴", Keys.Control | Keys.V, "paste"));
+        edit.DropDownItems.Add(EditorMenuItem("全选", Keys.Control | Keys.A, "selectAll"));
+        menu.Items.Add(edit);
+
+        var window = new ToolStripMenuItem("窗口");
+        window.DropDownItems.Add("最小化", null, (_, _) => MinimizeActiveWindow());
+        window.DropDownItems.Add("缩放", null, (_, _) => ToggleActiveWindowSize());
+        window.DropDownItems.Add(new ToolStripSeparator());
+        window.DropDownItems.Add("前置全部窗口", null, (_, _) => BringAllWindowsToFront());
+        menu.Items.Add(window);
+
+        var help = new ToolStripMenuItem("帮助");
+        help.DropDownItems.Add("显示本地数据位置", null, (_, _) => ShowDataDirectory());
+        help.DropDownItems.Add("打开使用说明", null, (_, _) => OpenManual());
+        help.DropDownItems.Add("显示启动诊断", null, (_, _) => OpenStartupDiagnostics());
+        menu.Items.Add(help);
+
         MainMenuStrip = menu;
         Controls.Add(menu);
+    }
+
+    private ToolStripMenuItem EditorMenuItem(string title, Keys shortcut, string command)
+    {
+        var item = new ToolStripMenuItem(title)
+        {
+            ShortcutKeys = shortcut,
+        };
+        item.Click += (_, _) => ExecuteEditorCommand(command);
+        return item;
     }
 
     private void BuildLoadingView()
@@ -173,6 +208,7 @@ internal sealed class MainForm : Form
             ShowStage("可操作", "页面已可操作。", "ready");
             _webView.Visible = true;
             _loading.Visible = false;
+            ShowOnboardingIfNeeded();
         }
         catch (WebView2RuntimeNotFoundException)
         {
@@ -448,6 +484,7 @@ internal sealed class MainForm : Form
             BackColor = Color.FromArgb(247, 248, 250),
             Font = new Font("Microsoft YaHei UI", 9F),
         };
+        form.Icon = CloneIcon(Icon);
         var webView = new WebView2
         {
             Dock = DockStyle.Fill,
@@ -723,6 +760,354 @@ internal sealed class MainForm : Form
         }
         BeginInvoke(() => MessageBox.Show(owner.IsDisposed ? this : owner, detail, "下载未完成",
             MessageBoxButtons.OK, MessageBoxIcon.Warning));
+    }
+
+    private static Icon LoadApplicationIcon()
+    {
+        try
+        {
+            return Icon.ExtractAssociatedIcon(Application.ExecutablePath)
+                ?? (Icon)SystemIcons.Application.Clone();
+        }
+        catch
+        {
+            return (Icon)SystemIcons.Application.Clone();
+        }
+    }
+
+    private static Icon? CloneIcon(Icon? icon)
+    {
+        return icon is null ? null : (Icon)icon.Clone();
+    }
+
+    private Form CreateLifecycleDialog(string title, Size size)
+    {
+        return new Form
+        {
+            Text = title,
+            Icon = CloneIcon(Icon),
+            StartPosition = FormStartPosition.CenterParent,
+            ClientSize = size,
+            MinimumSize = size,
+            FormBorderStyle = FormBorderStyle.FixedDialog,
+            MaximizeBox = false,
+            MinimizeBox = false,
+            ShowInTaskbar = false,
+            BackColor = Color.FromArgb(247, 248, 250),
+            Font = new Font("Microsoft YaHei UI", 9F),
+        };
+    }
+
+    private void ShowAbout()
+    {
+        using var dialog = CreateLifecycleDialog("关于零售通", new Size(520, 360));
+        var layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 4,
+            Padding = new Padding(28),
+        };
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        var title = new Label
+        {
+            Text = "零售通",
+            AutoSize = true,
+            Font = new Font("Microsoft YaHei UI", 22F, FontStyle.Bold),
+            ForeColor = Color.FromArgb(11, 79, 74),
+        };
+        var version = new Label
+        {
+            Text = $"Windows 试用版 · v{_version}",
+            AutoSize = true,
+            ForeColor = Color.FromArgb(80, 92, 102),
+            Margin = new Padding(0, 4, 0, 12),
+        };
+        var body = new Label
+        {
+            Text = "本地经营工作空间\n\n销售、库存、计划、售后与货损数据在本机处理。程序资源与业务数据分开保存，导出文件由你选择位置并在保存前确认。",
+            AutoSize = false,
+            Dock = DockStyle.Fill,
+            ForeColor = Color.FromArgb(70, 82, 92),
+        };
+        var close = new Button { Text = "关闭", AutoSize = true, Anchor = AnchorStyles.Right };
+        close.Click += (_, _) => dialog.Close();
+        layout.Controls.Add(title, 0, 0);
+        layout.Controls.Add(version, 0, 1);
+        layout.Controls.Add(body, 0, 2);
+        layout.Controls.Add(close, 0, 3);
+        dialog.AcceptButton = close;
+        dialog.Controls.Add(layout);
+        dialog.ShowDialog(this);
+    }
+
+    private void ShowOnboardingIfNeeded()
+    {
+        try
+        {
+            if (!File.Exists(OnboardingMarkerPath()))
+            {
+                BeginInvoke(ShowOnboarding);
+            }
+        }
+        catch
+        {
+            // A missing onboarding marker must never prevent the workspace from opening.
+        }
+    }
+
+    private string OnboardingMarkerPath()
+    {
+        return Path.Combine(RuntimeLocations.Create().Data, "desktop_onboarding.json");
+    }
+
+    private void MarkOnboardingSeen()
+    {
+        try
+        {
+            var path = OnboardingMarkerPath();
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.WriteAllText(
+                path,
+                "{\"version\":2}\n",
+                new System.Text.UTF8Encoding(false));
+        }
+        catch
+        {
+            // The guide can be opened again when the marker cannot be written.
+        }
+    }
+
+    private void ShowOnboarding()
+    {
+        var locations = RuntimeLocations.Create();
+        Directory.CreateDirectory(locations.Data);
+        using var dialog = CreateLifecycleDialog("使用与数据说明", new Size(720, 620));
+        var layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 4,
+            Padding = new Padding(28),
+        };
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        var heading = new Label
+        {
+            Text = "欢迎使用零售通",
+            AutoSize = true,
+            Font = new Font("Microsoft YaHei UI", 20F, FontStyle.Bold),
+            ForeColor = Color.FromArgb(11, 79, 74),
+        };
+        var intro = new Label
+        {
+            Text = "首次使用前先确认数据位置、安装方式和本地处理范围。",
+            AutoSize = true,
+            ForeColor = Color.FromArgb(80, 92, 102),
+            Margin = new Padding(0, 4, 0, 12),
+        };
+        var body = new RichTextBox
+        {
+            ReadOnly = true,
+            BorderStyle = BorderStyle.FixedSingle,
+            BackColor = Color.White,
+            Dock = DockStyle.Fill,
+            ScrollBars = RichTextBoxScrollBars.Vertical,
+            Text =
+                "首次使用\n" +
+                "1. 选择经营工作簿。\n" +
+                "2. 核对商品、仓库、日期和数据问题。\n" +
+                "3. 查看分析，预览后导出结果。\n\n" +
+                $"当前应用：\n{AppContext.BaseDirectory}\n\n" +
+                $"本地数据：\n{locations.Data}\n\n" +
+                $"默认导出：\n{locations.Export}\n\n" +
+                "原始 Excel 默认只读；开启源写回后，每次仍需预览并确认。历史、导入文件和已生成文件与程序分开保存。\n\n" +
+                "本地数据通过本机文件接入；本地服务只监听本机地址，不自动上传工作簿，不定时抓取线上数据。主动打开外部链接时交给系统浏览器。\n\n" +
+                "安装与升级：Windows 通过新版安装包执行。选择当前安装目录继续升级，安装器会保留用户数据并在替换前检查目录。",
+        };
+        var buttons = new FlowLayoutPanel
+        {
+            AutoSize = true,
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.RightToLeft,
+            WrapContents = false,
+        };
+        var start = new Button { Text = "开始使用", AutoSize = true };
+        var data = new Button { Text = "打开数据目录", AutoSize = true };
+        var install = new Button { Text = "安装与升级…", AutoSize = true };
+        start.Click += (_, _) =>
+        {
+            MarkOnboardingSeen();
+            dialog.Close();
+        };
+        data.Click += (_, _) => ShowDataDirectory();
+        install.Click += (_, _) =>
+        {
+            dialog.Close();
+            BeginInvoke(OpenInstallUpgrade);
+        };
+        buttons.Controls.Add(start);
+        buttons.Controls.Add(data);
+        buttons.Controls.Add(install);
+        layout.Controls.Add(heading, 0, 0);
+        layout.Controls.Add(intro, 0, 1);
+        layout.Controls.Add(body, 0, 2);
+        layout.Controls.Add(buttons, 0, 3);
+        dialog.AcceptButton = start;
+        dialog.Controls.Add(layout);
+        dialog.ShowDialog(this);
+    }
+
+    private void OpenInstallUpgrade()
+    {
+        var installer = FindAdjacentInstaller();
+        if (installer is not null)
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo(installer) { UseShellExecute = true });
+                return;
+            }
+            catch
+            {
+                // Fall through to the actionable instructions when the adjacent package cannot start.
+            }
+        }
+
+        using var dialog = CreateLifecycleDialog("安装与升级", new Size(620, 400));
+        var layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 3,
+            Padding = new Padding(28),
+        };
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        var heading = new Label
+        {
+            Text = "请使用新版安装包",
+            AutoSize = true,
+            Font = new Font("Microsoft YaHei UI", 18F, FontStyle.Bold),
+            ForeColor = Color.FromArgb(11, 79, 74),
+        };
+        var body = new Label
+        {
+            AutoSize = false,
+            Dock = DockStyle.Fill,
+            Text =
+                "Windows 的安装与升级由独立安装程序执行。\n\n" +
+                "请运行新版安装包，在“安装位置”选择当前程序目录。安装器会先检查应用是否退出、目录是否可替换和磁盘空间，再替换程序文件；用户数据、原始资料和导出文件保持在程序目录之外。\n\n" +
+                $"当前程序位置：\n{AppContext.BaseDirectory}\n\n" +
+                "新版安装包：下载后双击运行，不能通过本窗口直接生成或安装。",
+            ForeColor = Color.FromArgb(70, 82, 92),
+        };
+        var buttons = new FlowLayoutPanel
+        {
+            AutoSize = true,
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.RightToLeft,
+            WrapContents = false,
+        };
+        var close = new Button { Text = "关闭", AutoSize = true };
+        var manual = new Button { Text = "打开使用说明", AutoSize = true };
+        var folder = new Button { Text = "打开安装目录", AutoSize = true };
+        close.Click += (_, _) => dialog.Close();
+        manual.Click += (_, _) => OpenManual();
+        folder.Click += (_, _) =>
+        {
+            Process.Start(new ProcessStartInfo("explorer.exe", $"\"{Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory)}\"")
+            {
+                UseShellExecute = true,
+            });
+        };
+        buttons.Controls.Add(close);
+        buttons.Controls.Add(manual);
+        buttons.Controls.Add(folder);
+        layout.Controls.Add(heading, 0, 0);
+        layout.Controls.Add(body, 0, 1);
+        layout.Controls.Add(buttons, 0, 2);
+        dialog.AcceptButton = close;
+        dialog.Controls.Add(layout);
+        dialog.ShowDialog(this);
+    }
+
+    private static string? FindAdjacentInstaller()
+    {
+        var directories = new List<string> { AppContext.BaseDirectory };
+        var parent = Directory.GetParent(Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory));
+        if (parent is not null)
+        {
+            directories.Add(parent.FullName);
+        }
+        foreach (var directory in directories.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            if (!Directory.Exists(directory))
+            {
+                continue;
+            }
+            var installer = Directory.EnumerateFiles(directory, "*setup.exe", SearchOption.TopDirectoryOnly)
+                .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+                .FirstOrDefault();
+            if (installer is not null)
+            {
+                return installer;
+            }
+        }
+        return null;
+    }
+
+    private WebView2? ActiveWebView()
+    {
+        return _featureWindows.Values.FirstOrDefault(item => item.Form.ContainsFocus)?.WebView ?? _webView;
+    }
+
+    private Form ActiveNativeWindow()
+    {
+        return _featureWindows.Keys.FirstOrDefault(form => form.ContainsFocus) ?? this;
+    }
+
+    private void ExecuteEditorCommand(string command)
+    {
+        var webView = ActiveWebView();
+        if (webView?.CoreWebView2 is null)
+        {
+            return;
+        }
+        var script = $"document.execCommand({JsonSerializer.Serialize(command)});";
+        _ = webView.CoreWebView2.ExecuteScriptAsync(script);
+    }
+
+    private void MinimizeActiveWindow()
+    {
+        ActiveNativeWindow().WindowState = FormWindowState.Minimized;
+    }
+
+    private void ToggleActiveWindowSize()
+    {
+        var window = ActiveNativeWindow();
+        window.WindowState = window.WindowState == FormWindowState.Maximized
+            ? FormWindowState.Normal
+            : FormWindowState.Maximized;
+    }
+
+    private void BringAllWindowsToFront()
+    {
+        foreach (var window in _featureWindows.Keys.Append(this))
+        {
+            if (window.WindowState == FormWindowState.Minimized)
+            {
+                window.WindowState = FormWindowState.Normal;
+            }
+            window.BringToFront();
+        }
+        Activate();
     }
 
     private void ShowDataDirectory()

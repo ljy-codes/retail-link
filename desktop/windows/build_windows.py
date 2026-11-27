@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 from pathlib import Path
 import shutil
@@ -12,6 +13,7 @@ import subprocess
 import sys
 import time
 import urllib.request
+import xml.etree.ElementTree as ET
 import zipfile
 import zlib
 
@@ -404,47 +406,113 @@ def publish(delivery, installer):
 
 def write_icon(path):
     shared.check_destination(path)
-    size = 256
-    pixels = bytearray([0, 0, 0, 0] * size * size)
-
-    def set_pixel(x, y, color):
-        if 0 <= x < size and 0 <= y < size:
-            index = (y * size + x) * 4
-            pixels[index:index + 4] = bytes(color)
-
-    def rectangle(x0, y0, x1, y1, radius, color):
-        for y in range(max(0, y0), min(size, y1 + 1)):
-            for x in range(max(0, x0), min(size, x1 + 1)):
-                cx = min(max(x, x0 + radius), x1 - radius)
-                cy = min(max(y, y0 + radius), y1 - radius)
-                if (x - cx) ** 2 + (y - cy) ** 2 <= radius ** 2:
-                    set_pixel(x, y, color)
-
-    # A light rounded tile with a strong red rising line remains legible at the
-    # 16 px sizes used by Explorer, the taskbar and the Start menu.
-    rectangle(13, 18, 243, 247, 50, (45, 12, 18, 48))
-    rectangle(12, 12, 243, 241, 50, (218, 38, 57, 255))
-    rectangle(23, 23, 232, 230, 40, (255, 248, 245, 255))
-
-    for x0, x1, top, color in (
-        (48, 69, 158, (248, 205, 211, 255)),
-        (84, 105, 133, (244, 179, 188, 255)),
-        (120, 141, 146, (239, 151, 164, 255)),
-        (156, 177, 104, (230, 112, 129, 255)),
-        (192, 213, 78, (218, 38, 57, 255)),
+    source = ROOT / "docs/设计/图标概念/零售通-A02-通路.svg"
+    source_bytes = shared.read_bytes(source, ROOT)
+    for color in (b"#0B4F4A", b"#DEFFF2"):
+        if color not in source_bytes:
+            raise ValueError(f"A02图标源缺少确认色值：{color.decode()}")
+    svg = ET.fromstring(source_bytes)
+    elements = {
+        element.tag.rsplit("}", 1)[-1]: element
+        for element in svg
+    }
+    rect = elements.get("rect")
+    route = elements.get("path")
+    if (
+        rect is None
+        or route is None
+        or rect.attrib.get("fill") != "#0B4F4A"
+        or rect.attrib.get("rx") != "112"
+        or route.attrib.get("d") !=
+        "M 168 392 V 308 A 52 52 0 0 1 220 256 H 292 A 52 52 0 0 0 344 204 V 120"
+        or route.attrib.get("stroke") != "#DEFFF2"
+        or route.attrib.get("stroke-width") != "80"
     ):
-        rectangle(x0, top, x1, 203, 8, color)
+        raise ValueError("A02图标源结构与已确认的 Windows 图标契约不一致。")
 
-    points = ((48, 184), (82, 151), (128, 128), (170, 84), (210, 58))
-    for (x0, y0), (x1, y1) in zip(points, points[1:]):
-        steps = max(abs(x1 - x0), abs(y1 - y0))
-        for step in range(steps + 1):
-            x = round(x0 + (x1 - x0) * step / steps)
-            y = round(y0 + (y1 - y0) * step / steps)
-            rectangle(x - 7, y - 7, x + 7, y + 7, 7, (210, 35, 54, 255))
-    for x, y in points:
-        rectangle(x - 10, y - 10, x + 10, y + 10, 10, (255, 248, 245, 255))
-        rectangle(x - 6, y - 6, x + 6, y + 6, 6, (210, 35, 54, 255))
+    size = 256
+    supersample = 4
+    high_size = size * supersample
+    high_pixels = bytearray([0, 0, 0, 0] * high_size * high_size)
+
+    def set_high_pixel(x, y, color):
+        if 0 <= x < high_size and 0 <= y < high_size:
+            index = (y * high_size + x) * 4
+            high_pixels[index:index + 4] = bytes(color)
+
+    def rounded_rectangle(x0, y0, x1, y1, radius, color):
+        for y in range(max(0, math.floor(y0 * supersample)),
+                       min(high_size, math.ceil(y1 * supersample))):
+            point_y = (y + 0.5) / supersample
+            for x in range(max(0, math.floor(x0 * supersample)),
+                           min(high_size, math.ceil(x1 * supersample))):
+                point_x = (x + 0.5) / supersample
+                nearest_x = min(max(point_x, x0 + radius), x1 - radius)
+                nearest_y = min(max(point_y, y0 + radius), y1 - radius)
+                if ((point_x - nearest_x) ** 2
+                        + (point_y - nearest_y) ** 2) <= radius ** 2:
+                    set_high_pixel(x, y, color)
+
+    def capsule(x0, y0, x1, y1, radius, color):
+        min_x = max(0, math.floor((min(x0, x1) - radius) * supersample))
+        max_x = min(high_size, math.ceil((max(x0, x1) + radius) * supersample))
+        min_y = max(0, math.floor((min(y0, y1) - radius) * supersample))
+        max_y = min(high_size, math.ceil((max(y0, y1) + radius) * supersample))
+        dx = x1 - x0
+        dy = y1 - y0
+        length_squared = dx * dx + dy * dy
+        for y in range(min_y, max_y):
+            point_y = (y + 0.5) / supersample
+            for x in range(min_x, max_x):
+                point_x = (x + 0.5) / supersample
+                if length_squared == 0:
+                    distance_squared = (point_x - x0) ** 2 + (point_y - y0) ** 2
+                else:
+                    projection = ((point_x - x0) * dx + (point_y - y0) * dy) / length_squared
+                    projection = min(1, max(0, projection))
+                    closest_x = x0 + projection * dx
+                    closest_y = y0 + projection * dy
+                    distance_squared = (point_x - closest_x) ** 2 + (point_y - closest_y) ** 2
+                if distance_squared <= radius ** 2:
+                    set_high_pixel(x, y, color)
+
+    def arc(center_x, center_y, radius, start, end, color):
+        steps = max(8, math.ceil(abs(end - start) * radius * supersample / 2))
+        previous = (
+            center_x + radius * math.cos(start),
+            center_y + radius * math.sin(start),
+        )
+        for step in range(1, steps + 1):
+            angle = start + (end - start) * step / steps
+            current = (
+                center_x + radius * math.cos(angle),
+                center_y + radius * math.sin(angle),
+            )
+            capsule(*previous, *current, 20, color)
+            previous = current
+
+    green = (11, 79, 74, 255)
+    mint = (222, 255, 242, 255)
+    rounded_rectangle(0, 0, 256, 256, 56, green)
+    capsule(84, 196, 84, 154, 20, mint)
+    arc(110, 154, 26, math.pi, math.pi * 1.5, mint)
+    capsule(110, 128, 146, 128, 20, mint)
+    arc(146, 102, 26, math.pi / 2, 0, mint)
+    capsule(172, 102, 172, 60, 20, mint)
+
+    pixels = bytearray(size * size * 4)
+    for y in range(size):
+        for x in range(size):
+            samples = []
+            for sample_y in range(supersample):
+                start = ((y * supersample + sample_y) * high_size
+                         + x * supersample) * 4
+                for sample_x in range(supersample):
+                    index = start + sample_x * 4
+                    samples.append(high_pixels[index:index + 4])
+            index = (y * size + x) * 4
+            for channel in range(4):
+                pixels[index + channel] = sum(sample[channel] for sample in samples) // len(samples)
 
     raw = bytearray()
     for row in range(size):

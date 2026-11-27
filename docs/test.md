@@ -4,7 +4,7 @@
 
 当前结论：本机可执行的整理、卸载、构建和自动化自测已完成，**跨平台完整验收仍不完整**。Mac原生环境不可用，Windows安装、升级及卸载向导按用户要求未执行；最终安装由用户进行。以下保留阶段记录，最新结果见文末收尾段。
 
-后续授权：用户要求“正常推送到github”。本次仅通过正常提交、合并及非强制推送同步 `main`、`windows`、`macos` 的源码、文档和测试，不创建Release、不调整发布标签，也不安装应用。下方“未提交/未推送”等记录反映此前本地整理阶段；同步阶段的复核另记文末。
+后续授权（2026-11-26）：用户要求“正常推送到github”。当日仅通过正常提交、合并及非强制推送同步 `main`、`windows`、`macos` 的源码、文档和测试，不创建Release、不调整发布标签，也不安装应用。下方“未提交/未推送”等记录反映此前本地整理阶段；2026-11-27 的 Windows Release 另记文末。
 
 ### 版本、环境与范围
 
@@ -192,3 +192,48 @@ main根版本文件保持共享基线，不固定平台，宿主平台由服务�
 | 用户安装验收 | 未执行 | 按要求由用户亲自安装验收；本轮不运行安装器、不注册应用、不清理用户业务数据 |
 
 本轮没有发现新的业务功能失败。已有人工验收问题（图标审美、右侧展示/独立窗口人工体验、安装卸载流程、启动速度、空闲资源占用和 Mac 实机一致性）继续保留在工作区根目录 `E:\零售通\人工验收bug.md`，不因自动化通过而关闭。现有 WebView2 `WindowsBase` 版本冲突警告作为构建依赖优化点继续记录。
+
+## 2026-11-27｜Windows v0.2.10 功能与图标对齐补充
+
+本轮继续在 `E:\零售通\源码` 的 `windows` 分支执行。远端 `origin/windows` 已是当前本地基线 `5a968c9`，未发生需要合并的 Windows 新提交；未切换、修改、合并、重置或推送 `macos` 分支。远端 `origin/macos` 的最新构建入口已核对为同一 A02 SVG 图标源，Windows 仅完成自己的平台接入。
+
+### 本轮修改
+
+- `desktop/windows/app/MainForm.cs`：主窗口加载应用图标；独立工作窗口、关于/首次引导/安装升级等生命周期对话框复用图标；补齐应用、编辑、窗口、帮助菜单，首次使用与本地数据说明，安装升级入口，以及 WebView 编辑命令和窗口管理。
+- `desktop/windows/build_windows.py`：读取并校验共享 A02 SVG，使用 `#0B4F4A` / `#DEFFF2` 和确认的通路路径生成 Windows `.ico`，删除旧红色折线生成逻辑。
+- `desktop/windows/RetailLink.ico`：按 A02 源重新生成。
+- `docs/设计/图标概念/零售通-A02-通路.svg`：加入与最新 macOS 分支一致的共享设计源。
+- `tests/test_windows_package.py`、`tests/test_platform_lifecycle.py`：增加 Windows 菜单/图标/A02 颜色检查，并补齐生命周期隔离替身。
+- 根 README、Windows README、跨平台对照、使用说明和图标方案：更新当前图标与功能对齐说明；历史红色方案仍保留为历史记录。
+
+### 实际验证
+
+| 检查 | 实际结果 | 说明 |
+| --- | --- | --- |
+| Windows 包专项 | 23/23 通过 | `python -B -m unittest tests.test_windows_package -v` |
+| Windows 生命周期专项 | 10/10 通过 | `python -B tests/test_platform_lifecycle.py -v`；含后端退出、WebView2 运行时缺失、渲染/GPU 异常、重试和卸载参数边界 |
+| Windows Release 编译 | 0 错误，1 类既有警告 | `dotnet build desktop\windows\app\RetailLink.Windows.csproj -c Release --no-restore`；`MSB3277 WindowsBase` 版本冲突警告仍存在 |
+| Windows 完整构建 | 退出码 0 | `python -B desktop\windows\build_windows.py --keep-build`；应用发布、共享载荷、后端冒烟和安装器发布均完成，未运行安装器 |
+| Windows 图标生成 | 通过 | `python -B desktop\windows\build_windows.py --write-icon-only`；输出 `desktop/windows/RetailLink.ico` |
+| A02 图标颜色/结构 | 通过 | 源文件、构建脚本和 ICO 像素检查均通过；未发现旧红色主色 |
+| 文件大小限制 | 通过 | 修改文件均小于 314572800 字节；未读取或打包超限文件 |
+| Windows 安装器人工验收 | 未执行 | 按要求由用户本人安装；本轮不运行安装器、不注册应用 |
+| Mac 编译与实机图标验收 | 未执行 | 当前环境为 Windows，不能把源代码核对和 Windows 结果记为 Mac 实机通过 |
+
+### 结论与边界
+
+Windows 缺少的原生生命周期入口和独立工作窗口图标复用已完成源码实现并通过自动化/编译验证。Windows 与 macOS 的业务共享代码和 A02 图标设计源已对齐；Mac `.icns` 重建、任务栏/标题栏最终视觉和 Windows 安装后人工体验仍待对应平台验收。已有安装卸载体验、启动速度、空闲资源占用、真实业务对账及右侧展示人工缺陷继续保留在 `E:\零售通\人工验收bug.md`，不因本轮自动化通过关闭。
+
+## 2026-11-27｜Windows v0.2.10 GitHub Release
+
+用户在本轮明确授权最后推送 GitHub 并创建 Release。已在 `windows` 分支提交并推送源码，使用标签 `v0.2.10-windows` 创建 Windows Release；只上传 Windows 安装包和匹配使用说明 HTML，不上传构建缓存、内置运行时、业务数据或安装备份。
+
+| 检查 | 实际结果 | 证据或边界 |
+| --- | --- | --- |
+| Python 全量回归 | `Ran 322 tests`，`OK (skipped=8)`，失败/错误 0 | `python -B -m unittest discover -s tests -v`；8项为当前环境条件跳过，不计为 Mac 实机通过 |
+| Windows 交付安装包 | 107,346,837 字节，SHA-256 `0d1f44c49cba94f4b3fb0ef4b1acebb82f692fd0f56ffa637ddda8767b0d3e8b` | `产品交付/Windows/零售通-v0.2.10-windows-x64-setup.exe` |
+| Windows 使用说明 | 8,592 字节，SHA-256 `fe710c90ef4bac6fad057e2ab87166e7d6472dd04eab248af19ced66986c5272` | `产品交付/Windows/零售通-v0.2.10-使用说明.html` |
+| 标签与 Release | `v0.2.10-windows`，两个附件 | Windows x64；安装器未自动运行，用户安装验收仍未执行 |
+| 大文件限制 | 通过 | 源码、Release附件均小于 314572800 字节 |
+
+本轮 Release 不代表 Mac 已完成编译或实机验收，也不关闭 Windows 安装卸载体验、启动速度、资源占用、真实业务对账和人工界面缺陷。

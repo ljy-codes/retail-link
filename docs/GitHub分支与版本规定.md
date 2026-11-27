@@ -2,13 +2,13 @@
 
 更新：2026-11-27。长期只保留 `main`、`macos`、`windows` 三条分支，默认分支为 `main`。
 
-2026-11-27本次Windows收尾：用户要求拉取最新版本、补齐Windows功能并正常推送。Windows0.2.10为本地待人工安装候选，配对Mac源码版本0.2.9；本次不创建Release、不增删发布标签、不上传安装包、不自动安装，也不将Windows自测写成Mac实机通过。
+2026-11-27本次Windows发布：用户要求拉取最新版本、补齐Windows功能并正常推送，随后明确授权创建 Release。Windows0.2.10已发布，配对Mac源码版本0.2.9，标签为 `v0.2.10-windows`；本次不自动安装，也不将Windows自测写成Mac实机通过。
 
 | 分支 | 用途 |
 | --- | --- |
 | main | 完整工程的共享基线：server、backend、web、跨平台功能清单、通用测试、概览与答疑。共享业务规则只维护一份。 |
 | macos | 基于main的完整工程，维护Mac系统交互、应用与DMG构建、签名、Mac验证及发布记录。 |
-| windows | 基于main的完整工程，维护Windows系统交互、安装卸载、Windows验证及发布记录。已发布技术版本为Windows v0.2.6，本地待人工安装候选为v0.2.10。 |
+| windows | 基于main的完整工程，维护Windows系统交互、安装卸载、Windows验证及发布记录。已发布技术版本为Windows v0.2.10，配对Mac v0.2.9。 |
 
 ## 开发顺序
 
@@ -20,11 +20,12 @@ Mac带头做功能、业务分析和覆盖测试；共享改动先进入main，�
 
 ## 本项目版本规则
 
-- 采用X.Y.Z；Mac的Z为奇数，Windows的Z为大于配对Mac补丁号的偶数。历史已发布Mac0.2.1、Windows0.2.6，本地待人工安装候选Windows0.2.10，功能基线desktop-4。
+- 采用X.Y.Z；Mac的Z为奇数，Windows的Z为大于配对Mac补丁号的偶数。历史已发布Mac0.2.1、Windows0.2.6，当前已发布Windows0.2.10，功能基线desktop-4。
 - 标签必须带平台后缀：`v<X.Y.Z>-macos`、`v<X.Y.Z>-windows`。
 - Mac v0.2.1构建源码标签使用`v0.2.1-macos`，锚定已验收提交`fbb54cf`；随后合并远端Windows工程与兼容改动并同步三个分支。新标签远端核对后按规则清理旧Mac标签，历史源码继续从Git提交历史追溯，不重写历史提交。
 - Windows v0.2.4构建源码标签使用`v0.2.4-windows`，对应GitHub Release保留安装包与Windows说明两个资产；已经发布的`v0.2.2-windows`保留，不覆盖或复用。
 - Windows v0.2.6构建源码标签使用`v0.2.6-windows`，对应GitHub Release保留安装包与Windows说明两个资产；已经发布的`v0.2.4-windows`和`v0.2.2-windows`保留，不覆盖或复用。
+- Windows v0.2.10构建源码标签使用`v0.2.10-windows`，对应GitHub Release保留安装包与Windows说明两个资产；已发布的旧Windows标签和Release保留追溯，不覆盖或复用。
 - 后续Windows-only维护版本从0.2.6按2递增为0.2.8、0.3.0等，始终大于当前配对Mac补丁号；只有生成并验收新的Mac功能基线时才同步提升Mac奇数版本。
 - 每个平台长期只保留最新交付标签和下载入口；删除旧入口前先确认新版完整。历史源码始终从Git提交记录追溯，不重写历史提交。
 

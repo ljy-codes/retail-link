@@ -327,6 +327,9 @@ internal partial class MainForm : IAsyncDisposable
     private string _startupRunId = "";
     private bool _startupRunning, _closing;
     // Field declarations are taken from production when present.
+    // The production form shares these helpers with detachable windows;
+    // keep this harness focused on the main-window lifecycle path.
+    private CoreWebView2Environment? _webViewEnvironment;
     FIELD_DECLARATIONS
     public bool AutoReady = true;
     public bool FailureShown;
@@ -358,6 +361,14 @@ internal partial class MainForm : IAsyncDisposable
     private void OnNavigationStarting(object? sender, EventArgs args) {}
     private void OnNavigationCompleted(object? sender, EventArgs args) {}
     private void OnDownloadStarting(object? sender, EventArgs args) {}
+    private void ConfigureWebView(CoreWebView2 core) =>
+        core.ProcessFailed += OnWebViewProcessFailed;
+    private Task<string> InstallDesktopScriptAsync(CoreWebView2 core) =>
+        Task.FromResult("");
+    private FeatureWindow? FindFeatureWindow(object? sender) => null;
+    private Task CloseFeatureWindowAsync(FeatureWindow featureWindow, string? message = null) =>
+        Task.CompletedTask;
+    private sealed class FeatureWindow {}
 }
 internal sealed class FakeWebView(Action navigated)
 {

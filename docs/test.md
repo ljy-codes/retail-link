@@ -167,3 +167,28 @@
 main根版本文件保持共享基线，不固定平台，宿主平台由服务识别；平台分支根版本文件分别描述Windows0.2.8候选和Mac0.2.1源码待重建状态。实际App载荷仍由构建脚本读取 `desktop/release.json` 生成平台版本信息，未修改已构建候选安装包。
 
 本次更新不创建Release、不增删发布标签、不执行安装器。源码分支合并及GitHub同步不能关闭既有人工缺陷，也不能替代Mac编译、系统交互、Windows人工安装或真实7天业务对账。此前各阶段“未推送”记录按原执行时间保留；远端提交核对结果另存工作区 `工作记录/github-推送结果.json`。
+
+## 2026-11-27｜Windows 0.2.10 收尾、自测与远端同步前记录
+
+本轮在 `E:\零售通\源码` 的 `windows` 分支继续收尾。已执行 `git fetch origin --prune`：远端 `origin/windows` 仍为 `6a030da`，本地分支在提交本轮工作前领先 3 个提交；`origin/main` 为 `3279fea`，`origin/macos` 为 `d9d78b1`。`origin/main` 的新增内容包含 macOS 平台实现，按平台边界只核对共享契约，不合并或改写 macOS 平台实现。
+
+本轮新增的可交付检查项：
+
+- 修正 `tests/test_platform_lifecycle.py` 的隔离编译替身，使生产 `MainForm` 新增的 WebView 配置、独立窗口查找与关闭依赖能在主窗口生命周期测试中正确隔离；测试替身保留 `ProcessFailed` 事件订阅，渲染进程异常路径继续使用生产方法验证。
+- Windows `MainForm.cs` 的独立工作窗口宿主适配、右侧工作区恢复、下载对话框归属、窗口关闭回收和共享 WebView2 环境已完成构建验证。
+- `python -B desktop\windows\build_windows.py --keep-build` 成功完成 Windows 应用、内置 Python 载荷、后端冒烟和安装器构建。构建目录只用于隔离自测，未运行安装器、未注册应用。
+
+| 检查 | 本轮结果 | 证据或边界 |
+| --- | --- | --- |
+| Python 全量回归 | `Ran 320 tests`，`OK (skipped=8)`，失败/错误 0 | `python -B -m unittest discover -s tests -v`；跳过项来自本机缺少 macOS 编译环境、Windows 特定链接权限等条件，不计为 Mac 实机通过 |
+| Windows 生命周期专项 | 10/10 通过 | `test_platform_lifecycle.py`；包含后端异常退出、运行时缺失、渲染进程退出、GPU 退出、重试、卸载参数边界 |
+| Windows 应用与安装器构建 | 退出码 0 | `desktop/windows/build_windows.py --keep-build`；保留既有 `MSB3277 WindowsBase` 依赖版本冲突警告，未影响构建结果 |
+| 打包后端冒烟 | 通过 | ready JSON 的 PID/版本、`/api/health`、`data_health`、导入模板、无快照健康报告拒绝和父管道退出清理均通过 |
+| 产物版本 | `0.2.10` / `desktop-4` / 配对 Mac `0.2.9` | `desktop/build/windows/payload/app/版本.json` 和使用说明 HTML |
+| Windows 应用发布文件 | 49,716,902 字节，SHA-256 `9472A3DC87B0A2BA955C9CC40003735FA663AFDEBC4BB499B18FEC6E1289F5BC` | `desktop/build/windows/app-publish/零售通.exe` |
+| Windows 安装器构建文件 | 107,341,717 字节，SHA-256 `724C57DBAD2CC33B926E7E30A5DFCD809BD3B80BFCA479EA99D663CB2AEAE03E` | `desktop/build/windows/installer-publish/零售通-v0.2.10-windows-x64-setup.exe`；不上传、不自动安装 |
+| 大文件限制 | 通过 | 源码与构建目录均未发现超过 314572800 字节的文件；超限文件只检查元数据 |
+| Mac 实机一致性 | 未执行 | 本机为 Windows，未把共享源码核对、历史 Mac 结果或配对版本记录写成 Mac 编译/实机通过 |
+| 用户安装验收 | 未执行 | 按要求由用户亲自安装验收；本轮不运行安装器、不注册应用、不清理用户业务数据 |
+
+本轮没有发现新的业务功能失败。已有人工验收问题（图标审美、右侧展示/独立窗口人工体验、安装卸载流程、启动速度、空闲资源占用和 Mac 实机一致性）继续保留在工作区根目录 `E:\零售通\人工验收bug.md`，不因自动化通过而关闭。现有 WebView2 `WindowsBase` 版本冲突警告作为构建依赖优化点继续记录。

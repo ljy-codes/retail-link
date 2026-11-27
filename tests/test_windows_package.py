@@ -60,7 +60,7 @@ class WindowsPackageTests(unittest.TestCase):
         metadata = self.build.windows_metadata(self.release)
         self.assertEqual(metadata["version"], self.release["windowsVersion"])
         self.assertEqual(metadata["featureLevel"], "desktop-4")
-        self.assertEqual(metadata["pairedMacVersion"], "0.2.1")
+        self.assertEqual(metadata["pairedMacVersion"], self.release["macVersion"])
 
     def test_unsupported_feature_level_is_rejected(self):
         unsupported = dict(self.release, featureLevel="desktop-2")
@@ -93,6 +93,22 @@ class WindowsPackageTests(unittest.TestCase):
                          "chooseDirectory", "chooseFile", "saveFile", "showInFolder"):
             self.assertIn(contract, script)
             self.assertIn(contract, combined)
+
+    def test_windows_host_owns_workspace_popups_and_restores_the_same_page(self):
+        main = (WINDOWS / "app" / "MainForm.cs").read_text(encoding="utf-8")
+        for text in (
+            "CoreWebView2NewWindowRequestedEventArgs",
+            "GetDeferral",
+            "args.NewWindow",
+            "WindowCloseRequested",
+            "window.name",
+            "RetailLinkWorkspace?.restore",
+            "独立工作窗口",
+        ):
+            self.assertIn(text, main)
+        self.assertIn("about:blank", main)
+        self.assertIn("NewWindowRequested", main)
+        self.assertIn("CloseFeatureWindowAsync", main)
 
     def test_payload_guard_rejects_user_data_build_cache_and_installer_sources(self):
         forbidden = [

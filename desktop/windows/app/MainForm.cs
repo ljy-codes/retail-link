@@ -15,9 +15,11 @@ internal sealed class MainForm : Form
     private readonly Button _retry = new();
     private readonly Button _quit = new();
     private readonly BackendManager _backend = new();
+    private readonly Dictionary<Form, FeatureWindow> _featureWindows = new();
     private readonly string _version;
     private readonly Stopwatch _startupWatch = new();
     private NativeBridge? _bridge;
+    private CoreWebView2Environment? _webViewEnvironment;
     private TaskCompletionSource<bool>? _navigationCompleted;
     private TaskCompletionSource<bool>? _frontendReady;
     private CancellationTokenSource? _startupCancellation;
@@ -215,9 +217,22 @@ internal sealed class MainForm : Form
         var userData = Path.Combine(locations.Data, "WebView2");
         Directory.CreateDirectory(userData);
         var environment = await CoreWebView2Environment.CreateAsync(null, userData);
+        _webViewEnvironment = environment;
         await _webView.EnsureCoreWebView2Async(environment);
         var core = _webView.CoreWebView2
             ?? throw new InvalidOperationException("WebView2 未能初始化。");
+        ConfigureWebView(core);
+        _bridge = new NativeBridge(_webView, this, () => _backend.BackendUri?.Port);
+        _bridge.FrontendReady += () =>
+        {
+            RecordStartupStage("可操作", "收到 frontendReady");
+            _frontendReady?.TrySetResult(true);
+        };
+        await InstallDesktopScriptAsync(core);
+    }
+
+    private void ConfigureWebView(CoreWebView2 core)
+    {
         core.Settings.AreDevToolsEnabled = false;
         core.Settings.AreDefaultContextMenusEnabled = true;
         core.Settings.IsStatusBarEnabled = false;
@@ -231,13 +246,11 @@ internal sealed class MainForm : Form
         core.NavigationCompleted += OnNavigationCompleted;
         core.DownloadStarting += OnDownloadStarting;
         core.ProcessFailed += OnWebViewProcessFailed;
-        _bridge = new NativeBridge(_webView, this, () => _backend.BackendUri?.Port);
-        _bridge.FrontendReady += () =>
-        {
-            RecordStartupStage("可操作", "收到 frontendReady");
-            _frontendReady?.TrySetResult(true);
-        };
-        await core.AddScriptToExecuteOnDocumentCreatedAsync(
+    }
+
+    private Task<string> InstallDesktopScriptAsync(CoreWebView2 core)
+    {
+        return core.AddScriptToExecuteOnDocumentCreatedAsync(
             $$"""
             window.webkit = window.webkit || {};
             window.webkit.messageHandlers = window.webkit.messageHandlers || {};
@@ -250,6 +263,17 @@ internal sealed class MainForm : Form
 
     private async void OnWebViewProcessFailed(object? sender, CoreWebView2ProcessFailedEventArgs args)
     {
+        var featureWindow = FindFeatureWindow(sender);
+        if (featureWindow is not null)
+        {
+            if (args.ProcessFailedKind == CoreWebView2ProcessFailedKind.RenderProcessExited)
+            {
+                await CloseFeatureWindowAsync(
+                    featureWindow,
+                    "独立工作窗口的页面进程已停止，页面已恢复到右侧展示区。");
+            }
+            return;
+        }
         if (_closing || _webViewFailure is not null
             || args.ProcessFailedKind != CoreWebView2ProcessFailedKind.RenderProcessExited)
         {
@@ -291,6 +315,10 @@ internal sealed class MainForm : Form
 
     private void OnNavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs args)
     {
+        if (!ReferenceEquals(sender, _webView.CoreWebView2))
+        {
+            return;
+        }
         if (args.IsSuccess)
         {
             RecordStartupStage("页面加载", $"导航完成，耗时 {_startupWatch.Elapsed.TotalSeconds:0.00} 秒");
@@ -302,12 +330,34 @@ internal sealed class MainForm : Form
         ShowLoading("页面加载未完成", $"WebView2 错误代码：{args.WebErrorStatus}", failed: true);
     }
 
-    private void OnNewWindowRequested(object? sender, CoreWebView2NewWindowRequestedEventArgs args)
+    private async void OnNewWindowRequested(object? sender, CoreWebView2NewWindowRequestedEventArgs args)
     {
+        using var deferral = args.GetDeferral();
         args.Handled = true;
+        if (string.Equals(args.Uri, "about:blank", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                var windowName = string.IsNullOrWhiteSpace(args.Name)
+                    ? $"retail-link-feature-{Guid.NewGuid():N}"
+                    : args.Name;
+                var featureWindow = await CreateFeatureWindowAsync(windowName);
+                args.NewWindow = featureWindow.WebView.CoreWebView2
+                    ?? throw new InvalidOperationException("独立工作窗口的 WebView2 未能初始化。");
+                featureWindow.Form.Activate();
+            }
+            catch (Exception error)
+            {
+                MessageBox.Show(this, $"无法打开独立工作窗口：{error.Message}",
+                    "零售通", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+            return;
+        }
+
+        var source = sender as CoreWebView2;
         if (IsLocal(args.Uri))
         {
-            _webView.CoreWebView2.Navigate(args.Uri);
+            source?.Navigate(args.Uri);
         }
         else
         {
@@ -317,10 +367,12 @@ internal sealed class MainForm : Form
 
     private void OnDownloadStarting(object? sender, CoreWebView2DownloadStartingEventArgs args)
     {
+        var owner = FindFeatureWindow(sender)?.Form ?? this;
         if (!IsLocalDownload(args.DownloadOperation.Uri))
         {
             args.Cancel = true;
-            MessageBox.Show(this, "已阻止非本机下载。", "零售通", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(owner, "已阻止非本机下载。", "零售通",
+                MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
@@ -337,7 +389,7 @@ internal sealed class MainForm : Form
             CheckPathExists = true,
             Filter = "Excel、CSV 或 ZIP 文件|*.xlsx;*.csv;*.zip|所有文件|*.*",
         };
-        if (dialog.ShowDialog(this) != DialogResult.OK)
+        if (dialog.ShowDialog(owner) != DialogResult.OK)
         {
             args.Cancel = true;
             return;
@@ -365,7 +417,7 @@ internal sealed class MainForm : Form
                 }
                 catch (Exception error)
                 {
-                    ShowDownloadError($"无法保存下载文件：{error.Message}\n已有文件保持不变。");
+                    ShowDownloadError(owner, $"无法保存下载文件：{error.Message}\n已有文件保持不变。");
                 }
                 finally
                 {
@@ -375,9 +427,143 @@ internal sealed class MainForm : Form
             else if (operation.State == CoreWebView2DownloadState.Interrupted)
             {
                 TryDelete(staging);
-                ShowDownloadError($"下载中断：{operation.InterruptReason}");
+                ShowDownloadError(owner, $"下载中断：{operation.InterruptReason}");
             }
         };
+    }
+
+    private async Task<FeatureWindow> CreateFeatureWindowAsync(string windowName)
+    {
+        if (_webViewEnvironment is null)
+        {
+            throw new InvalidOperationException("WebView2 运行环境尚未初始化。");
+        }
+
+        var form = new Form
+        {
+            Text = "零售通 · 独立工作窗口",
+            StartPosition = FormStartPosition.CenterParent,
+            MinimumSize = new Size(900, 640),
+            ClientSize = new Size(1180, 820),
+            BackColor = Color.FromArgb(247, 248, 250),
+            Font = new Font("Microsoft YaHei UI", 9F),
+        };
+        var webView = new WebView2
+        {
+            Dock = DockStyle.Fill,
+        };
+        form.Controls.Add(webView);
+        var featureWindow = new FeatureWindow(windowName, form, webView);
+        _featureWindows[form] = featureWindow;
+        form.FormClosing += (_, e) => OnFeatureWindowClosing(featureWindow, e);
+        form.FormClosed += (_, _) => _featureWindows.Remove(form);
+        form.Show(this);
+
+        try
+        {
+            await webView.EnsureCoreWebView2Async(_webViewEnvironment);
+            var core = webView.CoreWebView2
+                ?? throw new InvalidOperationException("独立工作窗口的 WebView2 未能初始化。");
+            ConfigureWebView(core);
+            core.WindowCloseRequested += (_, _) => _ = CloseFeatureWindowAsync(featureWindow);
+            featureWindow.Bridge = new NativeBridge(webView, form, () => _backend.BackendUri?.Port);
+            await InstallDesktopScriptAsync(core);
+            return featureWindow;
+        }
+        catch
+        {
+            _featureWindows.Remove(form);
+            featureWindow.AllowClose = true;
+            form.Close();
+            throw;
+        }
+    }
+
+    private void OnFeatureWindowClosing(FeatureWindow featureWindow, FormClosingEventArgs args)
+    {
+        if (featureWindow.AllowClose)
+        {
+            return;
+        }
+        args.Cancel = true;
+        if (!featureWindow.Closing)
+        {
+            _ = CloseFeatureWindowAsync(featureWindow);
+        }
+    }
+
+    private async Task CloseFeatureWindowAsync(FeatureWindow featureWindow, string? message = null)
+    {
+        if (featureWindow.AllowClose || featureWindow.Closing)
+        {
+            return;
+        }
+        featureWindow.Closing = true;
+        try
+        {
+            var route = await ReadFeatureRouteAsync(featureWindow);
+            if (!_closing && _webView.CoreWebView2 is not null)
+            {
+                var restore = $"window.RetailLinkWorkspace?.restore({JsonSerializer.Serialize(route)},true);";
+                await _webView.CoreWebView2.ExecuteScriptAsync(restore);
+            }
+            featureWindow.AllowClose = true;
+            _featureWindows.Remove(featureWindow.Form);
+            featureWindow.Form.Close();
+            if (message is not null && !_closing)
+            {
+                MessageBox.Show(this, message, "零售通",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+        }
+        catch
+        {
+            featureWindow.AllowClose = true;
+            _featureWindows.Remove(featureWindow.Form);
+            if (!featureWindow.Form.IsDisposed)
+            {
+                featureWindow.Form.Close();
+            }
+        }
+    }
+
+    private async Task<string> ReadFeatureRouteAsync(FeatureWindow featureWindow)
+    {
+        var fallback = FeatureRoute(featureWindow.WindowName);
+        var core = featureWindow.WebView.CoreWebView2;
+        if (core is null)
+        {
+            return fallback;
+        }
+        try
+        {
+            var raw = await core.ExecuteScriptAsync("window.name");
+            var name = JsonSerializer.Deserialize<string>(raw);
+            return string.IsNullOrWhiteSpace(name) ? fallback : FeatureRoute(name);
+        }
+        catch
+        {
+            return fallback;
+        }
+    }
+
+    private static string FeatureRoute(string windowName)
+    {
+        const string prefix = "retail-link-";
+        var route = windowName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+            ? windowName[prefix.Length..]
+            : windowName;
+        return route.Length is > 0 and <= 96 ? route : "dashboard";
+    }
+
+    private FeatureWindow? FindFeatureWindow(object? sender)
+    {
+        if (sender is not CoreWebView2 core)
+        {
+            return null;
+        }
+        return _featureWindows.Values.FirstOrDefault(
+            feature => ReferenceEquals(feature.WebView.CoreWebView2, core));
     }
 
     private bool IsLocal(string? value)
@@ -529,13 +715,13 @@ internal sealed class MainForm : Form
         ShowLoading("本地服务已停止", detail, failed: true);
     }
 
-    private void ShowDownloadError(string detail)
+    private void ShowDownloadError(Form owner, string detail)
     {
         if (IsDisposed || _closing)
         {
             return;
         }
-        BeginInvoke(() => MessageBox.Show(this, detail, "下载未完成",
+        BeginInvoke(() => MessageBox.Show(owner.IsDisposed ? this : owner, detail, "下载未完成",
             MessageBoxButtons.OK, MessageBoxIcon.Warning));
     }
 
@@ -634,8 +820,34 @@ internal sealed class MainForm : Form
         }
         _closing = true;
         Hide();
+        await CloseAllFeatureWindowsAsync();
         await _backend.DisposeAsync();
         _allowClose = true;
         Close();
+    }
+
+    private async Task CloseAllFeatureWindowsAsync()
+    {
+        foreach (var featureWindow in _featureWindows.Values.ToArray())
+        {
+            await CloseFeatureWindowAsync(featureWindow);
+        }
+    }
+
+    private sealed class FeatureWindow
+    {
+        public FeatureWindow(string windowName, Form form, WebView2 webView)
+        {
+            WindowName = windowName;
+            Form = form;
+            WebView = webView;
+        }
+
+        public string WindowName { get; }
+        public Form Form { get; }
+        public WebView2 WebView { get; }
+        public NativeBridge? Bridge { get; set; }
+        public bool Closing { get; set; }
+        public bool AllowClose { get; set; }
     }
 }
